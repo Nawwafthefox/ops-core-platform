@@ -1,6 +1,7 @@
 import React from 'react'
 import { Container, Dropdown } from 'react-bootstrap'
 import { useLocation, useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../lib/AuthProvider'
 
 function titleFromPath(pathname: string) {
@@ -16,7 +17,9 @@ function titleFromPath(pathname: string) {
 }
 
 export function Topbar() {
-  const { ctx, signOut } = useAuth()
+  
+  const { t, i18n } = useTranslation();
+const { ctx, signOut } = useAuth()
   const loc = useLocation()
   const nav = useNavigate()
 

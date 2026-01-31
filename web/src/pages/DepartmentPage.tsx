@@ -1,13 +1,16 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { Alert, Button, Card, Spinner, Table } from 'react-bootstrap'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next';
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../lib/AuthProvider'
 import type { DepartmentEmployeeWorkloadRow } from '../lib/types'
 import { fmtHoursDays } from '../lib/format'
 
 export function DepartmentPage() {
-  const { ctx } = useAuth()
+  
+  const { t } = useTranslation();
+const { ctx } = useAuth()
   const nav = useNavigate()
 
   const [loading, setLoading] = useState(true)
@@ -54,18 +57,14 @@ export function DepartmentPage() {
     <div>
       <div className="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
         <div>
-          <div className="fw-semibold" style={{ fontSize: 18 }}>
-            My Department
-          </div>
+          <div className="fw-semibold" style={{ fontSize: 18 }}>{t('department.title')}</div>
           <div className="ocp-muted">
             Employee workload, time-in-step, and performance visibility (department-scoped).
           </div>
         </div>
         <div className="d-flex gap-2">
           <Button variant="outline-secondary" className="rounded-pill" onClick={() => fetchData()} disabled={loading}>
-            <i className="bi bi-arrow-clockwise me-2" />
-            Refresh
-          </Button>
+            <i className="bi bi-arrow-clockwise me-2" />{t('department.refresh')}</Button>
           <Button className="rounded-pill" onClick={() => nav('/tasks')}>
             Open requests
           </Button>

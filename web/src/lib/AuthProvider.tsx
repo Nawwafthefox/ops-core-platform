@@ -49,7 +49,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   useEffect(() => {
-    let mounted = true
+    
+    (async () => {
+      try {
+        const { data, error } = await supabase.rpc('rpc_whoami');
+        console.log('[rpc_whoami]', { data, error });
+      } catch (e) {
+        console.log('[rpc_whoami]', e);
+      }
+    })();
+let mounted = true
 
     supabase.auth.getSession().then(({ data }) => {
       if (!mounted) return

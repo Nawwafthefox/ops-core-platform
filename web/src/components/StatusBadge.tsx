@@ -8,10 +8,16 @@ export function StepStatusBadge({ status }: { status: StepStatus | null | undefi
   const v =
     status === 'queued'
       ? 'secondary'
+      : status === 'in_review'
+        ? 'info'
       : status === 'in_progress'
         ? 'primary'
+        : status === 'info_required'
+          ? 'warning'
         : status === 'done_pending_approval'
           ? 'warning'
+          : status === 'on_hold'
+            ? 'secondary'
           : status === 'approved'
             ? 'success'
             : status === 'returned'
@@ -21,7 +27,11 @@ export function StepStatusBadge({ status }: { status: StepStatus | null | undefi
                 : 'secondary'
 
   const label =
-    status === 'done_pending_approval' ? 'pending approval' : status.replaceAll('_', ' ')
+    status === 'done_pending_approval'
+      ? 'pending approval'
+      : status === 'info_required'
+        ? 'info required'
+        : status.replaceAll('_', ' ')
 
   return (
     <Badge bg={v} className="rounded-pill px-3 py-2 text-uppercase" style={{ fontSize: 11 }}>

@@ -1,0 +1,24 @@
+{
+  "nav": {
+    "dashboard": "Dashboard",
+    "tasks": "Requests / Tasks",
+    "create_request": "Create Request",
+    "sla": "SLA Dashboard",
+    "department": "My Department",
+    "audit": "Audit Logs",
+    "automation": "Automation",
+    "admin": "Admin Console",
+    "system_admin": "System Admin"
+  },
+  "common": {
+    "loading": "Loading…",
+    "forbidden": "Forbidden",
+    "save": "Save",
+    "cancel": "Cancel",
+    "create": "Create",
+    "refresh": "Refresh",
+    "language": "Language",
+    "english": "English",
+    "arabic": "Arabic"
+  }
+}

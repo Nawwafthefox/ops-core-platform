@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
+import { useTranslation } from 'react-i18next';
 import {
   Alert,
   Badge,
@@ -31,6 +32,8 @@ export function TaskDetailPage() {
   const nav = useNavigate()
   const { ctx } = useAuth()
 
+  const { t } = useTranslation();
+
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
@@ -55,6 +58,11 @@ export function TaskDetailPage() {
   const [showComplete, setShowComplete] = useState(false)
   const [showApprove, setShowApprove] = useState(false)
   const [showReturn, setShowReturn] = useState(false)
+
+  const [showHold, setShowHold] = useState(false)
+  const [showInfoRequired, setShowInfoRequired] = useState(false)
+  const [holdNotes, setHoldNotes] = useState('')
+  const [infoNotes, setInfoNotes] = useState('')
 
   const [nextDeptId, setNextDeptId] = useState('')
   const [nextAssigneeId, setNextAssigneeId] = useState('')
@@ -178,7 +186,7 @@ export function TaskDetailPage() {
 
   const doAssign = async () => {
     if (!currentStep?.id) return
-    if (!assignUserId) return setErr('Select a user to assign.')
+    if (!assignUserId) return setErr(t('task_detail.err_select_user'))
     setBusy(true)
     setErr(null)
     try {
@@ -267,6 +275,63 @@ export function TaskDetailPage() {
       setReturnReason('')
       setReturnDeptId('')
       setReturnAssigneeId('')
+      await loadAll()
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const doHold = async () => {
+    if (!currentStep?.id) return
+    if (!holdNotes.trim()) return setErr(t('task_detail.err_hold_reason'))
+    setBusy(true)
+    setErr(null)
+    try {
+      const { error } = await supabase.rpc('rpc_step_set_on_hold', {
+        p_step_id: currentStep.id,
+        p_notes: holdNotes.trim(),
+      })
+      if (error) throw error
+      setShowHold(false)
+      setHoldNotes('')
+      await loadAll()
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const doInfoRequired = async () => {
+    if (!currentStep?.id) return
+    if (!infoNotes.trim()) return setErr(t('task_detail.err_info_required'))
+    setBusy(true)
+    setErr(null)
+    try {
+      const { error } = await supabase.rpc('rpc_step_set_info_required', {
+        p_step_id: currentStep.id,
+        p_notes: infoNotes.trim(),
+      })
+      if (error) throw error
+      setShowInfoRequired(false)
+      setInfoNotes('')
+      await loadAll()
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const doResume = async () => {
+    if (!currentStep?.id) return
+    setBusy(true)
+    setErr(null)
+    try {
+      const { error } = await supabase.rpc('rpc_step_resume', { p_step_id: currentStep.id })
+      if (error) throw error
       await loadAll()
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e))
@@ -403,7 +468,7 @@ export function TaskDetailPage() {
   if (!request) {
     return (
       <Alert variant="danger" className="ocp-card p-4">
-        Request not found or not accessible.
+        {t('task_detail.not_found')}
         <div className="mt-3">
           <Button variant="outline-secondary" onClick={() => nav('/tasks')}>
             Back
@@ -426,8 +491,8 @@ export function TaskDetailPage() {
             {request.title}
           </div>
           <div className="ocp-muted small mt-1">
-            Requested by <span className="fw-semibold">{request.requester_name ?? '—'}</span> •{' '}
-            {request.origin_department_name ?? '—'} • Created {fmtFromNow(request.created_at)}
+            {t('task_detail.requested_by')} <span className="fw-semibold">{request.requester_name ?? t('task_detail.none')}</span> •{' '}
+            {request.origin_department_name ?? t('task_detail.none')} • {t('task_detail.created_label')} {fmtFromNow(request.created_at)}
           </div>
         </div>
 
@@ -446,11 +511,29 @@ export function TaskDetailPage() {
             <Card.Body>
               <div className="d-flex justify-content-between align-items-start flex-wrap gap-2">
                 <div>
-                  <div className="fw-semibold">Current step</div>
+                  <div className="fw-semibold">{t('task_detail.current_step')}</div>
                   <div className="small ocp-muted">
-                    Department: <span className="fw-semibold">{request.current_department_name ?? '—'}</span> • Assignee:{' '}
-                    <span className="fw-semibold">{request.current_assignee_name ?? 'Unassigned'}</span>
+                    {t('task_detail.department')}: <span className="fw-semibold">{request.current_department_name ?? t('task_detail.none')}</span> • {t('task_detail.assignee')}:{' '}
+                    <span className="fw-semibold">{request.current_assignee_name ?? t('task_detail.unassigned')}</span>
                   </div>
+
+                  {request.current_step_status_notes && (
+                    <Alert
+                      className="mt-2 mb-0"
+                      variant={
+                        currentStep?.status === 'info_required'
+                          ? 'warning'
+                          : currentStep?.status === 'on_hold'
+                            ? 'secondary'
+                            : 'info'
+                      }
+                    >
+                      <div className="small">{t('task_detail.notes')}</div>
+                      <div className="fw-semibold" style={{ whiteSpace: 'pre-wrap' }}>
+                        {request.current_step_status_notes}
+                      </div>
+                    </Alert>
+                  )}
                 </div>
 
                 <div className="d-flex gap-2 flex-wrap">
@@ -462,7 +545,7 @@ export function TaskDetailPage() {
                         style={{ width: 220 }}
                         disabled={busy}
                       >
-                        <option value="">Assign to…</option>
+                        <option value="">{t('task_detail.assign_to')}</option>
                         {deptPeople.map((p) => (
                           <option key={p.user_id} value={p.user_id}>
                             {p.full_name}
@@ -508,6 +591,43 @@ export function TaskDetailPage() {
                       Return
                     </Button>
                   )}
+
+                  {(isCurrentAssignee || canApprove) && (currentStep?.status === 'queued' || currentStep?.status === 'in_progress') && (
+                    <Button
+                      variant="outline-warning"
+                      className="rounded-pill"
+                      onClick={() => {
+                        setErr(null)
+                        setShowInfoRequired(true)
+                      }}
+                      disabled={busy}
+                    >
+                      <i className="bi bi-question-circle me-2" />
+                      Info required
+                    </Button>
+                  )}
+
+                  {(isCurrentAssignee || canApprove) && (currentStep?.status === 'queued' || currentStep?.status === 'in_progress') && (
+                    <Button
+                      variant="outline-secondary"
+                      className="rounded-pill"
+                      onClick={() => {
+                        setErr(null)
+                        setShowHold(true)
+                      }}
+                      disabled={busy}
+                    >
+                      <i className="bi bi-pause-circle me-2" />
+                      On hold
+                    </Button>
+                  )}
+
+                  {(isCurrentAssignee || canApprove) && (currentStep?.status === 'info_required' || currentStep?.status === 'on_hold') && (
+                    <Button variant="outline-primary" className="rounded-pill" onClick={() => doResume()} disabled={busy}>
+                      <i className="bi bi-play-circle me-2" />
+                      Resume
+                    </Button>
+                  )}
                 </div>
               </div>
 
@@ -515,25 +635,64 @@ export function TaskDetailPage() {
 
               <Row className="g-3">
                 <Col md={4}>
-                  <div className="small ocp-muted">Type</div>
-                  <div className="fw-semibold">{request.request_type_name ?? '—'}</div>
+                  <div className="small ocp-muted">{t('task_detail.type')}</div>
+                  <div className="fw-semibold">{request.request_type_name ?? t('task_detail.none')}</div>
                 </Col>
                 <Col md={4}>
-                  <div className="small ocp-muted">Priority</div>
+                  <div className="small ocp-muted">{t('task_detail.priority')}</div>
                   <Badge bg="light" text="dark" className="rounded-pill px-3 py-2 border">
                     {priorityLabel(request.priority)}
                   </Badge>
                 </Col>
                 <Col md={4}>
-                  <div className="small ocp-muted">Due</div>
-                  <div className="fw-semibold">{fmtDateTime(request.due_at)}</div>
+                  <div className="small ocp-muted">{t('task_detail.current_step')} SLA</div>
+                  <div className="fw-semibold">{fmtDateTime(request.current_step_due_at ?? request.due_at)}</div>
+                  {request.current_step_due_at && (
+                    <div className={request.current_step_is_overdue ? 'small text-danger' : 'small ocp-muted'}>
+                      {request.current_step_is_overdue ? t('task_detail.overdue') + ' ' : t('task_detail.due') + ' '} {fmtFromNow(request.current_step_due_at)}
+                    </div>
+                  )}
                 </Col>
               </Row>
+
+              {(request.amount || request.cost_center || request.project_code || request.external_ref || request.category || request.risk_level) && (
+                <>
+                  <hr />
+                  <Row className="g-3">
+                    <Col md={4}>
+                      <div className="small ocp-muted">{t('task_detail.amount')}</div>
+                      <div className="fw-semibold">
+                        {request.amount ? `${request.amount} ${request.currency ?? ''}`.trim() : t('task_detail.none')}
+                      </div>
+                    </Col>
+                    <Col md={4}>
+                      <div className="small ocp-muted">{t('task_detail.cost_center')}</div>
+                      <div className="fw-semibold">{request.cost_center ?? t('task_detail.none')}</div>
+                    </Col>
+                    <Col md={4}>
+                      <div className="small ocp-muted">{t('task_detail.project')}</div>
+                      <div className="fw-semibold">{request.project_code ?? t('task_detail.none')}</div>
+                    </Col>
+                    <Col md={4}>
+                      <div className="small ocp-muted">{t('task_detail.external_reference')}</div>
+                      <div className="fw-semibold">{request.external_ref ?? t('task_detail.none')}</div>
+                    </Col>
+                    <Col md={4}>
+                      <div className="small ocp-muted">{t('task_detail.category')}</div>
+                      <div className="fw-semibold">{request.category ?? t('task_detail.none')}</div>
+                    </Col>
+                    <Col md={4}>
+                      <div className="small ocp-muted">{t('task_detail.risk_level')}</div>
+                      <div className="fw-semibold">{request.risk_level ?? t('task_detail.none')}</div>
+                    </Col>
+                  </Row>
+                </>
+              )}
 
               {request.description && (
                 <>
                   <hr />
-                  <div className="fw-semibold mb-1">Description</div>
+                  <div className="fw-semibold mb-1">{t('task_detail.description')}</div>
                   <div style={{ whiteSpace: 'pre-wrap' }}>{request.description}</div>
                 </>
               )}
@@ -544,8 +703,8 @@ export function TaskDetailPage() {
             <Card.Body>
               <div className="d-flex justify-content-between align-items-center">
                 <div>
-                  <div className="fw-semibold">Comments</div>
-                  <div className="small ocp-muted">Conversation thread (logged)</div>
+                  <div className="fw-semibold">{t('task_detail.comments')}</div>
+                  <div className="small ocp-muted">{t('task_detail.comments_subtitle')}</div>
                 </div>
               </div>
 
@@ -562,20 +721,20 @@ export function TaskDetailPage() {
                     ))}
                   </div>
                 ) : (
-                  <div className="text-muted">No comments yet.</div>
+                  <div className="text-muted">{t('task_detail.no_comments')}</div>
                 )}
               </div>
 
               <hr />
 
               <Form.Group>
-                <Form.Label className="fw-semibold">Add comment</Form.Label>
+                <Form.Label className="fw-semibold">{t('task_detail.add_comment')}</Form.Label>
                 <Form.Control
                   as="textarea"
                   rows={3}
                   value={commentBody}
                   onChange={(e) => setCommentBody(e.target.value)}
-                  placeholder="Write a note, question, or handoff detail…"
+                  placeholder="{t('task_detail.comment_placeholder')}"
                 />
               </Form.Group>
 
@@ -592,8 +751,8 @@ export function TaskDetailPage() {
             <Card.Body>
               <div className="d-flex justify-content-between align-items-center flex-wrap gap-2">
                 <div>
-                  <div className="fw-semibold">Attachments</div>
-                  <div className="small ocp-muted">Stored in Supabase Storage (private bucket)</div>
+                  <div className="fw-semibold">{t('task_detail.attachments')}</div>
+                  <div className="small ocp-muted">{t('task_detail.attachments_subtitle')}</div>
                 </div>
                 <Form.Group controlId="fileUpload" className="mb-0">
                   <Form.Label className="btn btn-outline-primary rounded-pill mb-0">
@@ -603,7 +762,7 @@ export function TaskDetailPage() {
                       type="file"
                       hidden
                       onChange={(e) => {
-                        const file = e.target.files?.[0]
+                        const file = (e.currentTarget as HTMLInputElement).files?.[0]
                         if (file) void uploadAttachment(file)
                         e.currentTarget.value = ''
                       }}
@@ -619,8 +778,8 @@ export function TaskDetailPage() {
                     <Table responsive className="mb-0 align-middle">
                       <thead>
                         <tr>
-                          <th>File</th>
-                          <th>Uploaded</th>
+                          <th>{t('task_detail.file')}</th>
+                          <th>{t('task_detail.uploaded')}</th>
                           <th></th>
                         </tr>
                       </thead>
@@ -629,7 +788,7 @@ export function TaskDetailPage() {
                           <tr key={a.id}>
                             <td>
                               <div className="fw-semibold">{a.file_name}</div>
-                              <div className="small ocp-muted">{a.mime_type ?? '—'}</div>
+                              <div className="small ocp-muted">{a.mime_type ?? t('task_detail.none')}</div>
                             </td>
                             <td className="small">{fmtDateTime(a.created_at)}</td>
                             <td className="text-end">
@@ -649,7 +808,7 @@ export function TaskDetailPage() {
                     </Table>
                   </div>
                 ) : (
-                  <div className="text-muted">No attachments.</div>
+                  <div className="text-muted">{t('task_detail.no_attachments')}</div>
                 )}
               </div>
             </Card.Body>
@@ -659,8 +818,8 @@ export function TaskDetailPage() {
         <Col lg={4}>
           <Card className="ocp-card mb-3">
             <Card.Body>
-              <div className="fw-semibold">Workflow steps</div>
-              <div className="small ocp-muted">Full trace + timing</div>
+              <div className="fw-semibold">{t('task_detail.workflow_steps')}</div>
+              <div className="small ocp-muted">{t('task_detail.workflow_subtitle')}</div>
 
               <div className="mt-3 ocp-timeline">
                 {steps.map((s) => (
@@ -668,20 +827,20 @@ export function TaskDetailPage() {
                     <div className="ocp-timeline-dot" />
                     <div className="d-flex justify-content-between align-items-start">
                       <div className="ocp-timeline-title">
-                        Step {s.step_no} • Dept {s.department_id.slice(0, 8)}
+                        {t('task_detail.step')} {s.step_no} • {t('task_detail.dept')} {s.department_id.slice(0, 8)}
                       </div>
                       <div>
                         <StepStatusBadge status={s.status} />
                       </div>
                     </div>
                     <div className="ocp-timeline-meta">
-                      Assigned: {s.assignee_name ?? 'Unassigned'} • Created {fmtFromNow(s.created_at)}
+                      {t('task_detail.assigned')}: {s.assignee_name ?? t('task_detail.unassigned')} • {t('task_detail.created_label')} {fmtFromNow(s.created_at)}
                     </div>
-                    {s.started_at && <div className="small ocp-muted">Started: {fmtDateTime(s.started_at)}</div>}
-                    {s.completed_at && <div className="small ocp-muted">Completed: {fmtDateTime(s.completed_at)}</div>}
-                    {s.approved_at && <div className="small ocp-muted">Approved: {fmtDateTime(s.approved_at)}</div>}
-                    {s.returned_at && <div className="small text-danger">Returned: {fmtDateTime(s.returned_at)}</div>}
-                    {s.return_reason && <div className="small text-danger">Reason: {s.return_reason}</div>}
+                    {s.started_at && <div className="small ocp-muted">{t('task_detail.started')}: {fmtDateTime(s.started_at)}</div>}
+                    {s.completed_at && <div className="small ocp-muted">{t('task_detail.completed')}: {fmtDateTime(s.completed_at)}</div>}
+                    {s.approved_at && <div className="small ocp-muted">{t('task_detail.approved')}: {fmtDateTime(s.approved_at)}</div>}
+                    {s.returned_at && <div className="small text-danger">{t('task_detail.returned')}: {fmtDateTime(s.returned_at)}</div>}
+                    {s.return_reason && <div className="small text-danger">{t('task_detail.reason')}: {s.return_reason}</div>}
                   </div>
                 ))}
               </div>
@@ -690,8 +849,8 @@ export function TaskDetailPage() {
 
           <Card className="ocp-card">
             <Card.Body>
-              <div className="fw-semibold">Recent events</div>
-              <div className="small ocp-muted">System log for this request</div>
+              <div className="fw-semibold">{t('task_detail.recent_events')}</div>
+              <div className="small ocp-muted">{t('task_detail.events_subtitle')}</div>
 
               <div className="mt-3">
                 {events.length ? (
@@ -699,8 +858,8 @@ export function TaskDetailPage() {
                     <Table responsive className="mb-0 align-middle">
                       <thead>
                         <tr>
-                          <th>When</th>
-                          <th>Event</th>
+                          <th>{t('task_detail.when')}</th>
+                          <th>{t('task_detail.event')}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -717,7 +876,7 @@ export function TaskDetailPage() {
                     </Table>
                   </div>
                 ) : (
-                  <div className="text-muted">No events.</div>
+                  <div className="text-muted">{t('task_detail.no_events')}</div>
                 )}
               </div>
             </Card.Body>
@@ -728,17 +887,17 @@ export function TaskDetailPage() {
       {/* Complete modal */}
       <Modal show={showComplete} onHide={() => setShowComplete(false)} centered>
         <Modal.Header closeButton>
-          <Modal.Title>Mark step as done</Modal.Title>
+          <Modal.Title>{t('task_detail.mark_done_title')}</Modal.Title>
         </Modal.Header>
         <Modal.Body>
           <Form.Group>
-            <Form.Label>Completion notes (optional)</Form.Label>
+            <Form.Label>{t('task_detail.completion_notes_optional')}</Form.Label>
             <Form.Control
               as="textarea"
               rows={4}
               value={completionNotes}
               onChange={(e) => setCompletionNotes(e.target.value)}
-              placeholder="What was done, what to check, any links or files…"
+              placeholder="{t('task_detail.completion_placeholder')}"
             />
           </Form.Group>
         </Modal.Body>
@@ -755,17 +914,17 @@ export function TaskDetailPage() {
       {/* Approve / forward modal */}
       <Modal show={showApprove} onHide={() => setShowApprove(false)} centered>
         <Modal.Header closeButton>
-          <Modal.Title>Approve & route</Modal.Title>
+          <Modal.Title>{t('task_detail.approve_route_title')}</Modal.Title>
         </Modal.Header>
         <Modal.Body>
           <Alert variant="info">
-            Leave <strong>Next department</strong> empty to close the request after approval.
+            {t('task_detail.approve_info')}
           </Alert>
 
           <Form.Group className="mb-3">
-            <Form.Label>Next department (optional)</Form.Label>
+            <Form.Label>{t('task_detail.next_department_optional')}</Form.Label>
             <Form.Select value={nextDeptId} onChange={(e) => setNextDeptId(e.target.value)}>
-              <option value="">Close request</option>
+              <option value="">{t('task_detail.close_request')}</option>
               {departments.map((d) => (
                 <option key={d.id} value={d.id}>
                   {d.name}
@@ -773,18 +932,18 @@ export function TaskDetailPage() {
               ))}
             </Form.Select>
             <div className="small ocp-muted mt-2">
-              Managers can route to other departments, but cannot assign to their employees.
+              {t('task_detail.managers_route_info')}
             </div>
           </Form.Group>
 
           <Form.Group className="mb-3">
-            <Form.Label>Next assignee (optional)</Form.Label>
+            <Form.Label>{t('task_detail.next_assignee_optional')}</Form.Label>
             <Form.Select
               value={nextAssigneeId}
               onChange={(e) => setNextAssigneeId(e.target.value)}
               disabled={!canPickNextAssignee || !nextDeptId}
             >
-              <option value="">{canPickNextAssignee ? 'Unassigned' : 'Only Admin/CEO or same-dept manager can assign'}</option>
+              <option value="">{canPickNextAssignee ? t('task_detail.unassigned') : t('task_detail.only_admin_or_manager_assign')}</option>
               {nextPeople.map((p) => (
                 <option key={p.user_id} value={p.user_id}>
                   {p.full_name}
@@ -794,13 +953,13 @@ export function TaskDetailPage() {
           </Form.Group>
 
           <Form.Group>
-            <Form.Label>Approval notes (optional)</Form.Label>
+            <Form.Label>{t('task_detail.approval_notes_optional')}</Form.Label>
             <Form.Control
               as="textarea"
               rows={3}
               value={approvalNotes}
               onChange={(e) => setApprovalNotes(e.target.value)}
-              placeholder="Approval note / conditions / handoff instructions…"
+              placeholder="{t('task_detail.approval_placeholder')}"
             />
           </Form.Group>
         </Modal.Body>
@@ -817,28 +976,28 @@ export function TaskDetailPage() {
       {/* Return modal */}
       <Modal show={showReturn} onHide={() => setShowReturn(false)} centered>
         <Modal.Header closeButton>
-          <Modal.Title>Return with reason</Modal.Title>
+          <Modal.Title>{t('task_detail.return_title')}</Modal.Title>
         </Modal.Header>
         <Modal.Body>
           <Alert variant="warning">
-            The receiving department can send the workflow backward with mandatory notes. This is logged.
+            {t('task_detail.return_info')}
           </Alert>
 
           <Form.Group className="mb-3">
-            <Form.Label>Return reason (required)</Form.Label>
+            <Form.Label>{t('task_detail.return_reason_required')}</Form.Label>
             <Form.Control
               as="textarea"
               rows={3}
               value={returnReason}
               onChange={(e) => setReturnReason(e.target.value)}
-              placeholder="What is missing? What must be fixed before resubmission?"
+              placeholder="{t('task_detail.return_reason_placeholder')}"
             />
           </Form.Group>
 
           <Form.Group className="mb-3">
-            <Form.Label>Return to department</Form.Label>
+            <Form.Label>{t('task_detail.return_to_department')}</Form.Label>
             <Form.Select value={returnDeptId} onChange={(e) => setReturnDeptId(e.target.value)}>
-              <option value="">Default (previous)</option>
+              <option value="">{t('task_detail.default_previous')}</option>
               {departments.map((d) => (
                 <option key={d.id} value={d.id}>
                   {d.name}
@@ -848,13 +1007,13 @@ export function TaskDetailPage() {
           </Form.Group>
 
           <Form.Group>
-            <Form.Label>Return to assignee (optional)</Form.Label>
+            <Form.Label>{t('task_detail.return_to_assignee_optional')}</Form.Label>
             <Form.Select
               value={returnAssigneeId}
               onChange={(e) => setReturnAssigneeId(e.target.value)}
               disabled={!canPickReturnAssignee || !returnDeptId}
             >
-              <option value="">{canPickReturnAssignee ? 'Unassigned' : 'Only Admin/CEO or same-dept manager can assign'}</option>
+              <option value="">{canPickReturnAssignee ? t('task_detail.unassigned') : t('task_detail.only_admin_or_manager_assign')}</option>
               {returnPeople.map((p) => (
                 <option key={p.user_id} value={p.user_id}>
                   {p.full_name}
@@ -878,11 +1037,88 @@ export function TaskDetailPage() {
         </Modal.Footer>
       </Modal>
 
+      {/* Put on hold modal */}
+      <Modal show={showHold} onHide={() => setShowHold(false)} centered>
+        <Modal.Header closeButton>
+          <Modal.Title>{t('task_detail.hold_title')}</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <Alert variant="secondary">
+            {t('task_detail.hold_info')}
+          </Alert>
+
+          <Form.Group>
+            <Form.Label>{t('task_detail.hold_reason_required')}</Form.Label>
+            <Form.Control
+              as="textarea"
+              rows={3}
+              value={holdNotes}
+              onChange={(e) => setHoldNotes(e.target.value)}
+              placeholder="{t('task_detail.hold_placeholder')}"
+            />
+          </Form.Group>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="outline-secondary" className="rounded-pill" onClick={() => setShowHold(false)} disabled={busy}>
+            Cancel
+          </Button>
+          <Button
+            variant="secondary"
+            className="rounded-pill"
+            onClick={() => doHold()}
+            disabled={busy || holdNotes.trim().length < 3}
+          >
+            {busy ? <Spinner size="sm" animation="border" /> : 'Put on hold'}
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* Info required modal */}
+      <Modal show={showInfoRequired} onHide={() => setShowInfoRequired(false)} centered>
+        <Modal.Header closeButton>
+          <Modal.Title>{t('task_detail.info_title')}</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <Alert variant="warning">
+            This marks the step as <strong>{t('task_detail.info_required')}</strong> and notifies the requester.
+          </Alert>
+
+          <Form.Group>
+            <Form.Label>{t('task_detail.info_request_required')}</Form.Label>
+            <Form.Control
+              as="textarea"
+              rows={3}
+              value={infoNotes}
+              onChange={(e) => setInfoNotes(e.target.value)}
+              placeholder="{t('task_detail.info_placeholder')}"
+            />
+          </Form.Group>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button
+            variant="outline-secondary"
+            className="rounded-pill"
+            onClick={() => setShowInfoRequired(false)}
+            disabled={busy}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="warning"
+            className="rounded-pill"
+            onClick={() => doInfoRequired()}
+            disabled={busy || infoNotes.trim().length < 3}
+          >
+            {busy ? <Spinner size="sm" animation="border" /> : 'Request info'}
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
       {busy && (
         <div className="position-fixed bottom-0 end-0 p-3" style={{ zIndex: 2000 }}>
           <div className="ocp-card p-3 d-flex align-items-center gap-2">
             <Spinner size="sm" animation="border" />
-            <div className="small">Working…</div>
+            <div className="small">{t('task_detail.working')}</div>
           </div>
         </div>
       )}

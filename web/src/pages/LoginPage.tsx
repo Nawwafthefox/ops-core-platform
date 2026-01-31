@@ -1,10 +1,12 @@
 import React, { useMemo, useState } from 'react'
 import { Alert, Button, Card, Col, Container, Form, Row, Spinner } from 'react-bootstrap'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { supabase } from '../lib/supabaseClient'
 
 export function LoginPage() {
   const nav = useNavigate()
+  const { t } = useTranslation()
 
   const [mode, setMode] = useState<'signin' | 'signup'>('signin')
   const [email, setEmail] = useState('')
@@ -24,10 +26,7 @@ export function LoginPage() {
 
     try {
       if (!envOk) {
-        setMsg({
-          variant: 'danger',
-          text: 'Missing VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY. Create web/.env from web/.env.example.',
-        })
+        setMsg({ variant: 'danger', text: t('auth.missing_env_submit') })
         return
       }
 
@@ -37,22 +36,19 @@ export function LoginPage() {
         nav('/')
       } else {
         if (fullName.trim().length < 2) {
-          setMsg({ variant: 'warning', text: 'Full name is required.' })
+          setMsg({ variant: 'warning', text: t('auth.full_name_required') })
           return
         }
 
         const { error } = await supabase.auth.signUp({
           email,
           password,
-          options: { data: { full_name: fullName } },
+          options: { data: { full_name: fullName } }
         })
 
         if (error) throw error
 
-        setMsg({
-          variant: 'success',
-          text: 'Account created. If email confirmation is enabled, open Inbucket (http://localhost:54324) to confirm, then sign in.',
-        })
+        setMsg({ variant: 'success', text: t('auth.account_created') })
         setMode('signin')
       }
     } catch (e) {
@@ -72,10 +68,12 @@ export function LoginPage() {
               <Card.Body className="p-4">
                 <div className="d-flex align-items-start justify-content-between mb-3">
                   <div>
-                    <h4 className="mb-1">Operations Core Platform</h4>
-                    <div className="text-muted small">Internal Operations Hub • Requests • Workflow • KPIs</div>
+                    <h4 className="mb-1">{t('auth.app_name')}</h4>
+                    <div className="text-muted small">{t('auth.tagline')}</div>
                   </div>
-                  <div className="ocp-pill">{mode === 'signin' ? 'Sign in' : 'Create account'}</div>
+                  <div className="ocp-pill">
+                    {mode === 'signin' ? t('auth.sign_in') : t('auth.create_account')}
+                  </div>
                 </div>
 
                 {msg && (
@@ -86,37 +84,36 @@ export function LoginPage() {
 
                 {!envOk && (
                   <Alert variant="warning" className="mt-3">
-                    Missing env vars. Copy <span className="ocp-code">web/.env.example</span> →{' '}
-                    <span className="ocp-code">web/.env</span> and paste your local Supabase keys.
+                    <strong>{t('auth.missing_env_title')}:</strong> {t('auth.missing_env_body')}
                   </Alert>
                 )}
 
                 <Form className="mt-3" onSubmit={onSubmit}>
                   {mode === 'signup' && (
                     <Form.Group className="mb-3">
-                      <Form.Label>Full name</Form.Label>
+                      <Form.Label>{t('auth.full_name')}</Form.Label>
                       <Form.Control
                         value={fullName}
                         onChange={(e) => setFullName(e.target.value)}
-                        placeholder="e.g., Ahmed Al-Qahtani"
+                        placeholder={t('auth.full_name_placeholder')}
                         autoComplete="name"
                       />
                     </Form.Group>
                   )}
 
                   <Form.Group className="mb-3">
-                    <Form.Label>Email</Form.Label>
+                    <Form.Label>{t('auth.email')}</Form.Label>
                     <Form.Control
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       type="email"
-                      placeholder="name@company.com"
+                      placeholder={t('auth.email_placeholder')}
                       autoComplete="email"
                     />
                   </Form.Group>
 
                   <Form.Group className="mb-3">
-                    <Form.Label>Password</Form.Label>
+                    <Form.Label>{t('auth.password')}</Form.Label>
                     <Form.Control
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
@@ -127,7 +124,7 @@ export function LoginPage() {
                   </Form.Group>
 
                   <Button type="submit" className="w-100 rounded-pill" disabled={loading}>
-                    {loading ? <Spinner size="sm" animation="border" /> : mode === 'signin' ? 'Sign in' : 'Sign up'}
+                    {loading ? <Spinner size="sm" animation="border" /> : mode === 'signin' ? t('auth.sign_in') : t('auth.sign_up')}
                   </Button>
 
                   <div className="d-flex justify-content-between mt-3 small">
@@ -136,17 +133,15 @@ export function LoginPage() {
                       className="btn btn-link p-0"
                       onClick={() => setMode(mode === 'signin' ? 'signup' : 'signin')}
                     >
-                      {mode === 'signin' ? 'Create an account' : 'I already have an account'}
+                      {mode === 'signin' ? t('auth.create_account') : t('auth.already_have_account')}
                     </button>
-                    <span className="text-muted">Local MVP bootstrap</span>
+                    <span className="text-muted">{t('auth.local_bootstrap')}</span>
                   </div>
                 </Form>
               </Card.Body>
             </Card>
 
-            <div className="text-center text-muted small mt-3">
-              Tip: In local Supabase, auth emails appear in Inbucket at <span className="ocp-code">http://localhost:54324</span>
-            </div>
+            <div className="text-center text-muted small mt-3">{t('auth.local_tip')}</div>
           </Col>
         </Row>
       </Container>

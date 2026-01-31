@@ -1,0 +1,24 @@
+{
+  "nav": {
+    "dashboard": "لوحة التحكم",
+    "tasks": "الطلبات / المهام",
+    "create_request": "إنشاء طلب",
+    "sla": "لوحة مؤشرات SLA",
+    "department": "قسمي",
+    "audit": "سجل التدقيق",
+    "automation": "الأتمتة",
+    "admin": "لوحة الإدارة",
+    "system_admin": "إدارة النظام"
+  },
+  "common": {
+    "loading": "جارٍ التحميل…",
+    "forbidden": "غير مصرح",
+    "save": "حفظ",
+    "cancel": "إلغاء",
+    "create": "إنشاء",
+    "refresh": "تحديث",
+    "language": "اللغة",
+    "english": "الإنجليزية",
+    "arabic": "العربية"
+  }
+}

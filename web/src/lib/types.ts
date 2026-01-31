@@ -9,6 +9,21 @@ export type StepStatus =
   | 'returned'
   | 'rejected'
   | 'canceled'
+  | 'on_hold'
+  | 'info_required'
+  | 'in_review'
+
+export type WorkflowStatus =
+  | 'draft'
+  | 'submitted'
+  | 'manager_approved'
+  | 'in_review'
+  | 'in_progress'
+  | 'on_hold'
+  | 'info_required'
+  | 'completed'
+  | 'closed'
+  | 'rejected'
 
 export interface MyContextRow {
   user_id: string
@@ -30,6 +45,14 @@ export interface RequestCurrentRow {
   request_type_name: string | null
   priority: number
   request_status: RequestStatus
+  workflow_status: WorkflowStatus | null
+  amount: number | null
+  currency: string | null
+  cost_center: string | null
+  project_code: string | null
+  external_ref: string | null
+  category: string | null
+  risk_level: string | null
   requester_user_id: string
   requester_name: string | null
   origin_department_id: string | null
@@ -45,11 +68,15 @@ export interface RequestCurrentRow {
   current_assignee_id: string | null
   current_assignee_name: string | null
   current_step_status: StepStatus | null
+  current_step_status_notes: string | null
   current_step_created_at: string | null
   current_step_started_at: string | null
   current_step_completed_at: string | null
+  current_step_due_at: string | null
   current_step_age_hours: number | null
   current_step_age_days: number | null
+  current_step_hours_to_due: number | null
+  current_step_is_overdue: boolean | null
   request_age_hours: number | null
   request_age_days: number | null
 }
@@ -78,10 +105,12 @@ export interface DepartmentRow {
 export interface RequestTypeRow {
   id: string
   company_id: string
+  code?: string | null
   name: string
   description: string | null
   default_priority: number
   active: boolean
+  workflow_config?: Record<string, unknown> | null
 }
 
 export interface RequestStepRow {
@@ -102,6 +131,8 @@ export interface RequestStepRow {
   approved_by: string | null
   auto_approved: boolean
   approval_notes: string | null
+  status_notes: string | null
+  status_updated_at: string | null
   returned_at: string | null
   return_reason: string | null
   related_step_id: string | null
@@ -181,4 +212,21 @@ export interface MembershipRow {
   department_id: string | null
   created_at: string
   updated_at: string
+}
+
+export interface SlaOpenStepRow {
+  step_id: string
+  request_id: string
+  reference_code: string
+  title: string
+  request_type_name: string | null
+  workflow_status: WorkflowStatus | null
+  department_id: string
+  department_name: string
+  assigned_to: string | null
+  assignee_name: string | null
+  status: StepStatus
+  due_at: string
+  hours_to_due: number
+  is_overdue: boolean
 }

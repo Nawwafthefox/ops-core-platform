@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next';
 import { Alert, Button, Card, Form, Spinner, Table } from 'react-bootstrap'
 import { supabase } from '../../lib/supabaseClient'
 import { useAuth } from '../../lib/AuthProvider'
@@ -14,7 +15,9 @@ type DeptRTSetting = {
 }
 
 export function AutomationPage() {
-  const { ctx } = useAuth()
+  
+  const { t } = useTranslation();
+const { ctx } = useAuth()
 
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
@@ -157,9 +160,7 @@ export function AutomationPage() {
         </div>
         <div className="d-flex gap-2">
           <Button variant="outline-secondary" className="rounded-pill" onClick={() => activeDeptId && loadSettings(activeDeptId)} disabled={busy}>
-            <i className="bi bi-arrow-clockwise me-2" />
-            Refresh
-          </Button>
+            <i className="bi bi-arrow-clockwise me-2" />{t('automation.refresh')}</Button>
         </div>
       </div>
 
@@ -248,9 +249,7 @@ export function AutomationPage() {
                           </Form.Select>
                         </td>
                         <td className="text-end" style={{ width: 120 }}>
-                          <Button variant="outline-primary" className="rounded-pill" size="sm" onClick={() => save(rt.id)} disabled={busy}>
-                            Save
-                          </Button>
+                          <Button variant="outline-primary" className="rounded-pill" size="sm" onClick={() => save(rt.id)} disabled={busy}>{t('automation.save')}</Button>
                         </td>
                       </tr>
                     )

@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { Button, Card, Col, Row, Spinner, Table } from 'react-bootstrap'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next';
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../lib/AuthProvider'
 import type { RequestCurrentRow } from '../lib/types'
@@ -17,6 +18,8 @@ type Kpi = {
 export function DashboardPage() {
   const { ctx } = useAuth()
   const nav = useNavigate()
+
+  const { t } = useTranslation();
 
   const [loading, setLoading] = useState(true)
   const [rows, setRows] = useState<RequestCurrentRow[]>([])
@@ -77,10 +80,10 @@ export function DashboardPage() {
       <div className="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
         <div>
           <div className="fw-semibold" style={{ fontSize: 18 }}>
-            Welcome, {ctx?.full_name}
+            {t('dashboard.welcome', { name: ctx?.full_name ?? '' })}
           </div>
           <div className="ocp-muted">
-            Track work across departments with approvals, returns, audit history, and KPIs.
+            {t('dashboard.subtitle')}
           </div>
         </div>
         <div className="d-flex gap-2">
@@ -98,35 +101,35 @@ export function DashboardPage() {
       <div className="ocp-kpi mb-4">
         <Card className="ocp-card kpi-card">
           <Card.Body>
-            <div className="ocp-muted small">My open tasks</div>
+            <div className="ocp-muted small">{t('dashboard.my_open_tasks')}</div>
             <div className="display-6 fw-semibold">{kpi.myOpen}</div>
-            <div className="small ocp-muted">Assigned to you</div>
+            <div className="small ocp-muted">{t('dashboard.assigned_to_you')}</div>
           </Card.Body>
         </Card>
 
         <Card className="ocp-card kpi-card">
           <Card.Body>
-            <div className="ocp-muted small">Pending approvals</div>
+            <div className="ocp-muted small">{t('dashboard.pending_approvals')}</div>
             <div className="display-6 fw-semibold">{kpi.pendingApproval}</div>
-            <div className="small ocp-muted">{isManager ? 'In your department' : 'Company-wide'}</div>
+            <div className="small ocp-muted">{isManager ? t('dashboard.in_your_department') : t('dashboard.company_wide')}</div>
           </Card.Body>
         </Card>
 
         <Card className="ocp-card kpi-card">
           <Card.Body>
-            <div className="ocp-muted small">Overdue</div>
+            <div className="ocp-muted small">{t('dashboard.overdue')}</div>
             <div className="display-6 fw-semibold">{kpi.overdue}</div>
-            <div className="small ocp-muted">Past due date</div>
+            <div className="small ocp-muted">{t('dashboard.past_due_date')}</div>
           </Card.Body>
         </Card>
 
         <Card className="ocp-card kpi-card">
           <Card.Body>
-            <div className="ocp-muted small">Avg. age</div>
+            <div className="ocp-muted small">{t('dashboard.avg_age')}</div>
             <div className="display-6 fw-semibold">
               {kpi.avgAgeHours == null ? '—' : `${kpi.avgAgeHours.toFixed(1)} h`}
             </div>
-            <div className="small ocp-muted">Open requests</div>
+            <div className="small ocp-muted">{t('dashboard.open_requests')}</div>
           </Card.Body>
         </Card>
       </div>
@@ -135,8 +138,8 @@ export function DashboardPage() {
         <Card.Body>
           <div className="d-flex justify-content-between align-items-center mb-3">
             <div>
-              <div className="fw-semibold">Latest active requests</div>
-              <div className="small ocp-muted">Most recently updated (RLS filters what you can see)</div>
+              <div className="fw-semibold">{t('dashboard.latest_active_requests')}</div>
+              <div className="small ocp-muted">{t('dashboard.most_recently_updated')}</div>
             </div>
             <Button variant="outline-primary" className="rounded-pill" onClick={() => nav('/tasks')}>
               View all
@@ -152,12 +155,12 @@ export function DashboardPage() {
               <Table responsive className="mb-0 align-middle">
                 <thead>
                   <tr>
-                    <th>Ref</th>
-                    <th>Title</th>
-                    <th>Current dept</th>
-                    <th>Assignee</th>
-                    <th>Status</th>
-                    <th>Age</th>
+                    <th>{t('dashboard.ref')}</th>
+                    <th>{t('dashboard.title')}</th>
+                    <th>{t('dashboard.current_dept')}</th>
+                    <th>{t('dashboard.assignee')}</th>
+                    <th>{t('dashboard.status')}</th>
+                    <th>{t('dashboard.age')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -169,8 +172,8 @@ export function DashboardPage() {
                     >
                       <td className="fw-semibold">{r.reference_code}</td>
                       <td>{r.title}</td>
-                      <td>{r.current_department_name ?? '—'}</td>
-                      <td>{r.current_assignee_name ?? 'Unassigned'}</td>
+                      <td>{r.current_department_name ?? t('dashboard.no_dept')}</td>
+                      <td>{r.current_assignee_name ?? t('dashboard.unassigned')}</td>
                       <td className="d-flex gap-2 align-items-center">
                         <RequestStatusBadge status={r.request_status} />
                         <StepStatusBadge status={r.current_step_status} />
@@ -181,7 +184,7 @@ export function DashboardPage() {
                   {!top.length && (
                     <tr>
                       <td colSpan={6} className="text-center text-muted py-4">
-                        No open requests visible to you yet.
+                        {t('dashboard.no_open_requests')}
                       </td>
                     </tr>
                   )}

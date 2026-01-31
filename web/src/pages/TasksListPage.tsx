@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { Badge, Button, Card, Form, InputGroup, Spinner, Table } from 'react-bootstrap'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../lib/AuthProvider'
 import type { RequestCurrentRow } from '../lib/types'
@@ -12,6 +13,7 @@ type Scope = 'visible' | 'mine' | 'my_dept' | 'needs_approval'
 export function TasksListPage() {
   const nav = useNavigate()
   const { ctx } = useAuth()
+  const { t } = useTranslation()
 
   const [loading, setLoading] = useState(true)
   const [rows, setRows] = useState<RequestCurrentRow[]>([])
@@ -68,18 +70,18 @@ export function TasksListPage() {
       <div className="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
         <div>
           <div className="fw-semibold" style={{ fontSize: 18 }}>
-            Requests / Tasks
+            {t('tasks.title')}
           </div>
-          <div className="ocp-muted">Filtered automatically by your role and department access.</div>
+          <div className="ocp-muted">{t('tasks.subtitle')}</div>
         </div>
         <div className="d-flex gap-2">
           <Button variant="outline-secondary" className="rounded-pill" onClick={() => fetchData()} disabled={loading}>
             <i className="bi bi-arrow-clockwise me-2" />
-            Refresh
+            {t('tasks.refresh')}
           </Button>
           <Button className="rounded-pill" onClick={() => nav('/tasks/new')}>
             <i className="bi bi-plus-circle me-2" />
-            Create
+            {t('tasks.create')}
           </Button>
         </div>
       </div>
@@ -94,28 +96,29 @@ export function TasksListPage() {
               <Form.Control
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
-                placeholder="Search by ref, title, department, assignee…"
+                placeholder={t('tasks.search_placeholder')}
               />
             </InputGroup>
 
             <Form.Select value={scope} onChange={(e) => setScope(e.target.value as Scope)} style={{ width: 220 }}>
-              <option value="visible">Visible to me</option>
-              <option value="mine">Assigned to me</option>
-              <option value="my_dept">In my department</option>
-              <option value="needs_approval">Needs approval</option>
+              <option value="visible">{t('tasks.scope_visible')}</option>
+              <option value="mine">{t('tasks.scope_mine')}</option>
+              <option value="my_dept">{t('tasks.scope_my_dept')}</option>
+              <option value="needs_approval">{t('tasks.scope_needs_approval')}</option>
             </Form.Select>
 
             <Form.Check
               type="switch"
               id="showClosed"
-              label="Include closed"
+              label={t('tasks.include_closed')}
               checked={showClosed}
               onChange={(e) => setShowClosed(e.target.checked)}
             />
           </div>
 
           <div className="small ocp-muted">
-            Showing <span className="fw-semibold">{filtered.length}</span> records
+            {t('tasks.showing_records', { count: filtered.length })}{' '}
+            <span className="fw-semibold">{filtered.length}</span>
           </div>
         </Card.Body>
       </Card>
@@ -131,51 +134,58 @@ export function TasksListPage() {
               <Table responsive className="mb-0 align-middle">
                 <thead>
                   <tr>
-                    <th>Ref</th>
-                    <th>Title</th>
-                    <th>Type</th>
-                    <th>Priority</th>
-                    <th>Current dept</th>
-                    <th>Assignee</th>
-                    <th>Status</th>
-                    <th>Age</th>
-                    <th>Due</th>
+                    <th>{t('tasks.th_ref')}</th>
+                    <th>{t('tasks.th_title')}</th>
+                    <th>{t('tasks.th_type')}</th>
+                    <th>{t('tasks.th_priority')}</th>
+                    <th>{t('tasks.th_current_dept')}</th>
+                    <th>{t('tasks.th_assignee')}</th>
+                    <th>{t('tasks.th_status')}</th>
+                    <th>{t('tasks.th_age')}</th>
+                    <th>{t('tasks.th_sla_due')}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filtered.map((r) => (
-                    <tr
-                      key={r.id}
-                      style={{ cursor: 'pointer' }}
-                      onClick={() => nav(`/tasks/${r.id}`)}
-                    >
+                    <tr key={r.id} style={{ cursor: 'pointer' }} onClick={() => nav(`/tasks/${r.id}`)}>
                       <td className="fw-semibold">{r.reference_code}</td>
                       <td style={{ minWidth: 260 }}>
                         <div className="fw-semibold">{r.title}</div>
                         <div className="small ocp-muted">
-                          Requested by {r.requester_name ?? '—'} • {r.origin_department_name ?? '—'}
+                          {t('tasks.requested_by')} {r.requester_name ?? t('tasks.none')} • {r.origin_department_name ?? t('tasks.none')}
                         </div>
                       </td>
-                      <td>{r.request_type_name ?? '—'}</td>
+                      <td>{r.request_type_name ?? t('tasks.none')}</td>
                       <td>
                         <Badge bg="light" text="dark" className="rounded-pill px-3 py-2 border">
                           {priorityLabel(r.priority)}
                         </Badge>
                       </td>
-                      <td>{r.current_department_name ?? '—'}</td>
-                      <td>{r.current_assignee_name ?? 'Unassigned'}</td>
+                      <td>{r.current_department_name ?? t('tasks.none')}</td>
+                      <td>{r.current_assignee_name ?? t('tasks.unassigned')}</td>
                       <td className="d-flex gap-2 align-items-center">
                         <RequestStatusBadge status={r.request_status} />
                         <StepStatusBadge status={r.current_step_status} />
                       </td>
                       <td>{fmtHoursDays(r.current_step_age_hours, r.current_step_age_days)}</td>
-                      <td>{fmtDateTime(r.due_at)}</td>
+                      <td>
+                        <div className={r.current_step_is_overdue ? 'text-danger fw-semibold' : undefined}>
+                          {fmtDateTime(r.current_step_due_at ?? r.due_at)}
+                        </div>
+                        {r.current_step_due_at && r.current_step_hours_to_due !== null && r.current_step_hours_to_due !== undefined && (
+                          <div className={r.current_step_is_overdue ? 'small text-danger' : 'small ocp-muted'}>
+                            {r.current_step_is_overdue ? t('tasks.overdue') : t('tasks.due')}{' '}
+                            {t('tasks.due_in')}{' '}
+                            {fmtHoursDays(r.current_step_hours_to_due, r.current_step_hours_to_due / 24)}
+                          </div>
+                        )}
+                      </td>
                     </tr>
                   ))}
                   {!filtered.length && (
                     <tr>
                       <td colSpan={9} className="text-center text-muted py-4">
-                        No records match your filters.
+                        {t('tasks.no_match')}
                       </td>
                     </tr>
                   )}

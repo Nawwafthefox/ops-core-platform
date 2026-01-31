@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next';
 import { Alert, Button, Card, Form, Spinner, Table } from 'react-bootstrap'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../lib/AuthProvider'
@@ -8,7 +9,9 @@ import { fmtDateTime } from '../lib/format'
 type TableFilter = 'all' | 'requests' | 'request_steps' | 'request_comments' | 'memberships'
 
 export function AuditPage() {
-  const { ctx } = useAuth()
+  
+  const { t } = useTranslation();
+const { ctx } = useAuth()
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
@@ -69,9 +72,7 @@ export function AuditPage() {
         </div>
         <div className="d-flex gap-2">
           <Button variant="outline-secondary" className="rounded-pill" onClick={() => fetchData()} disabled={loading || busy}>
-            <i className="bi bi-arrow-clockwise me-2" />
-            Refresh
-          </Button>
+            <i className="bi bi-arrow-clockwise me-2" />{t('audit.refresh')}</Button>
         </div>
       </div>
 
@@ -137,9 +138,7 @@ export function AuditPage() {
                             className="rounded-pill"
                             onClick={() => rollback(r.id)}
                             disabled={busy}
-                          >
-                            Rollback
-                          </Button>
+                          >{t('audit.rollback')}</Button>
                         )}
                       </td>
                     </tr>
