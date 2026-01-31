@@ -1,0 +1,211 @@
+/* Operations Core Platform — UI baseline
+   Principles applied:
+   - Proximity & common region: cards and sections with consistent spacing
+   - Similarity: standardized table + badge + chip patterns
+   - Figure/ground: subtle background, strong content cards
+*/
+
+:root{
+  --ocp-sidebar-width: 280px;
+  --ocp-radius-lg: 16px;
+  --ocp-radius-md: 12px;
+  --ocp-shadow-sm: 0 1px 2px rgba(16,24,40,.06), 0 1px 3px rgba(16,24,40,.10);
+  --ocp-shadow-md: 0 8px 24px rgba(16,24,40,.12);
+}
+
+html, body {
+  height: 100%;
+}
+
+body{
+  margin: 0;
+  background: #f6f8fb;
+  color: #0f172a;
+}
+
+a{
+  text-decoration: none;
+}
+
+.ocp-app{
+  min-height: 100vh;
+}
+
+.ocp-shell{
+  display: flex;
+  min-height: 100vh;
+}
+
+.ocp-sidebar{
+  width: var(--ocp-sidebar-width);
+  background: #0b1220;
+  color: #e2e8f0;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  box-shadow: var(--ocp-shadow-md);
+}
+
+.ocp-brand{
+  padding: 18px 18px 10px 18px;
+}
+
+.ocp-brand .title{
+  font-weight: 800;
+  letter-spacing: .2px;
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.1;
+}
+
+.ocp-brand .subtitle{
+  margin: 6px 0 0 0;
+  font-size: 12px;
+  opacity: .75;
+}
+
+.ocp-nav{
+  padding: 10px 10px 18px 10px;
+}
+
+.ocp-nav .nav-item{
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  color: #e2e8f0;
+  margin: 4px 8px;
+  transition: background .15s ease, transform .15s ease;
+}
+
+.ocp-nav .nav-item:hover{
+  background: rgba(255,255,255,.08);
+}
+
+.ocp-nav .nav-item.active{
+  background: rgba(255,255,255,.12);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.08);
+}
+
+.ocp-nav .nav-icon{
+  width: 22px;
+  text-align: center;
+  opacity: .9;
+}
+
+.ocp-content{
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.ocp-topbar{
+  background: rgba(255,255,255,.85);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid rgba(15,23,42,.08);
+}
+
+.ocp-main{
+  padding: 24px;
+}
+
+.ocp-card{
+  border-radius: var(--ocp-radius-lg);
+  border: 1px solid rgba(15,23,42,.08);
+  box-shadow: var(--ocp-shadow-sm);
+}
+
+.ocp-muted{
+  color: rgba(15,23,42,.68);
+}
+
+.ocp-kpi{
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 14px;
+}
+
+.ocp-kpi .kpi-card{
+  grid-column: span 3;
+}
+
+@media (max-width: 1200px){
+  .ocp-kpi .kpi-card{ grid-column: span 6; }
+}
+@media (max-width: 768px){
+  .ocp-kpi .kpi-card{ grid-column: span 12; }
+}
+
+.ocp-table{
+  border-radius: var(--ocp-radius-md);
+  overflow: hidden;
+  border: 1px solid rgba(15,23,42,.08);
+}
+
+.ocp-table thead th{
+  font-size: 12px;
+  letter-spacing: .2px;
+  text-transform: uppercase;
+  color: rgba(15,23,42,.7);
+  background: #f9fbff;
+}
+
+.ocp-pill{
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(15,23,42,.12);
+  background: rgba(255,255,255,.8);
+}
+
+.ocp-timeline{
+  position: relative;
+  padding-left: 18px;
+}
+
+.ocp-timeline::before{
+  content: '';
+  position: absolute;
+  left: 7px;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: rgba(15,23,42,.12);
+}
+
+.ocp-timeline-item{
+  position: relative;
+  padding: 10px 0 10px 16px;
+}
+
+.ocp-timeline-dot{
+  position: absolute;
+  left: 0;
+  top: 16px;
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  background: #fff;
+  border: 2px solid rgba(15,23,42,.25);
+  box-shadow: var(--ocp-shadow-sm);
+}
+
+.ocp-timeline-title{
+  font-weight: 650;
+  font-size: 13px;
+}
+
+.ocp-timeline-meta{
+  font-size: 12px;
+  color: rgba(15,23,42,.65);
+}
+
+.ocp-code{
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  font-size: 12px;
+  padding: 3px 8px;
+  border-radius: 10px;
+  background: rgba(15,23,42,.06);
+  border: 1px solid rgba(15,23,42,.08);
+}
