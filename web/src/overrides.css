@@ -1,0 +1,46 @@
+/* Force dropdown menus above all app content */
+.dropdown-menu,
+.dropdown-menu.show,
+.dropdown-menu-end,
+.dropdown-menu[data-popper-placement] {
+  z-index: 999999 !important;
+}
+
+/* Ensure dropdown parent doesn't get clipped by overflow/stacking */
+.dropdown,
+.dropup,
+.dropend,
+.dropstart {
+  position: relative;
+  z-index: 999999 !important;
+}
+
+/* Prevent cards/sections from overlaying menus */
+.ocp-card,
+.ocp-kpi,
+.kpi-card,
+.ocp-main,
+.ocp-content,
+.ocp-shell {
+  position: relative;
+  z-index: 1;
+}
+
+/* TOPBAR_DROPDOWN_ZFIX: ensure dropdown overlays KPI cards */
+.ocp-content header,
+.ocp-content .ocp-topbar,
+.ocp-content .topbar,
+.ocp-content .navbar {
+  position: relative;
+  z-index: 5000 !important;
+  overflow: visible !important;
+}
+
+.dropdown-menu.show {
+  z-index: 6000 !important;
+}
+
+.ocp-kpi, .kpi-card, .ocp-card {
+  position: relative;
+  z-index: 1 !important;
+}

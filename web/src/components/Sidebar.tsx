@@ -1,8 +1,9 @@
-import React from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { NavLink } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../lib/AuthProvider'
 import { useSystemAdmin } from '../lib/useSystemAdmin'
+import { supabase } from '../lib/supabaseClient'
 
 type Item = {
   to: string
@@ -21,8 +22,6 @@ const items: Item[] = [
   { to: '/audit', icon: 'bi-shield-check', labelKey: 'nav.audit', roles: ['manager', 'admin', 'ceo'] },
   { to: '/settings/automation', icon: 'bi-sliders', labelKey: 'nav.automation', roles: ['manager', 'admin', 'ceo'] },
   { to: '/admin', icon: 'bi-gear', labelKey: 'nav.admin', roles: ['admin'] },
-
-  // Only show for system admins
   { to: '/admin/system', icon: 'bi-shield-lock', labelKey: 'nav.system_admin', systemOnly: true }
 ]
 
@@ -58,13 +57,53 @@ export function Sidebar() {
   const { isSystemAdmin } = useSystemAdmin()
   const { ctx } = useAuth()
 
+  // Prefer ctx.company_id if present; fallback to any legacy naming
+  const companyId = useMemo(() => {
+    return ((ctx as any)?.company_id ?? (ctx as any)?.companyId ?? '') as string
+  }, [ctx])
+
+  const [companyName, setCompanyName] = useState<string>('')
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function run() {
+      if (!companyId) {
+        setCompanyName('')
+        return
+      }
+
+      const { data, error } = await supabase
+        .from('companies')
+        .select('name')
+        .eq('id', companyId)
+        .maybeSingle()
+
+      if (cancelled) return
+      if (error) {
+        setCompanyName('')
+        return
+      }
+      setCompanyName((data as any)?.name ?? '')
+    }
+
+    run()
+    return () => {
+      cancelled = true
+    }
+  }, [companyId])
+
   return (
     <aside className="ocp-sidebar d-none d-lg-block">
       <div className="ocp-brand">
         <p className="title mb-1">Operations Core Platform</p>
+
         <p className="subtitle mb-0">
-          {ctx?.full_name} <span style={{ opacity: 0.6 }}>•</span>{' '}
-          <span className="text-capitalize">{ctx?.role}</span>
+          <span className="fw-semibold">{ctx?.full_name ?? ''}</span>
+          <span style={{ opacity: 0.6 }}> • </span>
+          <span className="fw-semibold">{companyName || '—'}</span>
+          <span style={{ opacity: 0.6 }}> • </span>
+          <span className="text-capitalize">{ctx?.role ?? ''}</span>
         </p>
       </div>
 

@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react'
+import { Alert, Badge, Button, Card, Form, Modal, Row, Spinner, Table } from 'react-bootstrap'
 import { supabase } from '../../lib/supabaseClient'
 
 type Company = { id: string; name: string; created_at?: string }
-type RoleType = 'employee' | 'manager' | 'admin' | 'ceo'
 type Department = { id: string; name: string }
+type RoleType = 'employee' | 'manager' | 'admin' | 'ceo'
 
 type UserRow = {
   user_id: string
@@ -18,365 +19,507 @@ type UserRow = {
   created_at: string
 }
 
-function Badge({ children, tone }: { children: React.ReactNode; tone: 'green' | 'red' | 'gray' | 'blue' }) {
-  const cls =
-    tone === 'green'
-      ? 'badge text-bg-success'
-      : tone === 'red'
-      ? 'badge text-bg-danger'
-      : tone === 'blue'
-      ? 'badge text-bg-primary'
-      : 'badge text-bg-secondary'
-  return <span className={cls}>{children}</span>
+type Draft = { role: RoleType; departmentId: string | null }
+
+function isPlaceholderEmail(email?: string | null) {
+  return !!email && email.toLowerCase().startsWith('placeholder-admin+')
 }
 
 export default function SystemAdminConsolePage() {
   const [companies, setCompanies] = useState<Company[]>([])
-  const [selectedCompanyId, setSelectedCompanyId] = useState<string>('')
+  const [selectedCompanyId, setSelectedCompanyId] = useState('')
 
-  const [users, setUsers] = useState<UserRow[]>([])
   const [departments, setDepartments] = useState<Department[]>([])
+  const [users, setUsers] = useState<UserRow[]>([])
+  const [drafts, setDrafts] = useState<Record<string, Draft>>({})
 
   const [loading, setLoading] = useState(false)
-  const [toast, setToast] = useState<{ tone: 'success' | 'danger' | 'warning'; text: string } | null>(null)
+  const [msg, setMsg] = useState<{ variant: 'success' | 'danger' | 'warning'; text: string } | null>(null)
 
-  // Create company modal state
-  const [showCreate, setShowCreate] = useState(false)
-  const [newCompanyName, setNewCompanyName] = useState('')
-  const [switchProfileToNewCompany, setSwitchProfileToNewCompany] = useState(true)
+  // Create company modal
+  const [showCreateCompany, setShowCreateCompany] = useState(false)
+  const [companyName, setCompanyName] = useState('')
+  const [createPlaceholderAdmin, setCreatePlaceholderAdmin] = useState(true)
+  const [placeholderAdminName, setPlaceholderAdminName] = useState('Placeholder Admin')
 
-  const selectedCompany = useMemo(
-    () => companies.find((c) => c.id === selectedCompanyId) ?? null,
-    [companies, selectedCompanyId]
-  )
+  // Create department
+  const [newDeptName, setNewDeptName] = useState('')
 
-  function setMsg(tone: 'success' | 'danger' | 'warning', text: string) {
-    setToast({ tone, text })
-    // auto-clear after a bit
-    window.setTimeout(() => setToast(null), 3500)
+  // Move modal
+  const [showMove, setShowMove] = useState(false)
+  const [moveUser, setMoveUser] = useState<UserRow | null>(null)
+  const [moveCompanyId, setMoveCompanyId] = useState('')
+  const [moveRole, setMoveRole] = useState<RoleType>('employee')
+  const [moveDeptId, setMoveDeptId] = useState('')
+  const [moveDepts, setMoveDepts] = useState<Department[]>([])
+  const [moveKeepActive, setMoveKeepActive] = useState(true)
+
+  const hasRealAdmin = useMemo(() => {
+    return users.some(
+      (u) =>
+        (u.membership_role === 'admin' || u.membership_role === 'ceo') &&
+        u.is_active &&
+        !isPlaceholderEmail(u.email)
+    )
+  }, [users])
+
+  const placeholderAdmin = useMemo(() => users.find((u) => isPlaceholderEmail(u.email)), [users])
+
+  function initDrafts(rows: UserRow[]) {
+    const next: Record<string, Draft> = {}
+    for (const u of rows) {
+      next[u.user_id] = {
+        role: (u.membership_role ?? 'employee') as RoleType,
+        departmentId: u.membership_department_id ?? null
+      }
+    }
+    setDrafts(next)
   }
 
   async function loadCompanies() {
     const { data, error } = await supabase.from('companies').select('id,name,created_at').order('created_at', { ascending: false })
-    if (error) return setMsg('danger', `Failed to load companies: ${error.message}`)
+    if (error) return setMsg({ variant: 'danger', text: `Failed to load companies: ${error.message}` })
     const rows = (data ?? []) as Company[]
     setCompanies(rows)
-    if (!selectedCompanyId && rows.length > 0) setSelectedCompanyId(rows[0].id)
+    if (!selectedCompanyId && rows.length) setSelectedCompanyId(rows[0].id)
   }
 
   async function loadDepartments(companyId: string) {
-    const { data, error } = await supabase.from('departments').select('id,name').eq('company_id', companyId).order('name', { ascending: true })
-    if (error) {
-      setDepartments([])
-      return setMsg('danger', `Failed to load departments: ${error.message}`)
-    }
+    const { data, error } = await supabase.from('departments').select('id,name').eq('company_id', companyId).order('name')
+    if (error) return setMsg({ variant: 'danger', text: `Failed to load departments: ${error.message}` })
     setDepartments((data ?? []) as Department[])
   }
 
   async function loadUsers(companyId: string) {
+    const { data, error } = await supabase.rpc('rpc_sys_list_users', { p_company_id: companyId })
+    if (error) return setMsg({ variant: 'danger', text: `Failed to load users: ${error.message}` })
+    const rows = (data ?? []) as UserRow[]
+    setUsers(rows)
+    initDrafts(rows)
+  }
+
+  async function refreshAll() {
+    if (!selectedCompanyId) return
     setLoading(true)
+    setMsg(null)
     try {
-      const { data, error } = await supabase.rpc('rpc_sys_list_users', { p_company_id: companyId })
-      if (error) {
-        setUsers([])
-        return setMsg('danger', `Failed to load users: ${error.message}`)
-      }
-      setUsers((data ?? []) as UserRow[])
+      await Promise.all([loadDepartments(selectedCompanyId), loadUsers(selectedCompanyId)])
     } finally {
       setLoading(false)
     }
   }
 
-  useEffect(() => {
-    void loadCompanies()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  useEffect(() => { void loadCompanies() }, [])
+  useEffect(() => { if (selectedCompanyId) void refreshAll() }, [selectedCompanyId])
 
-  useEffect(() => {
-    if (!selectedCompanyId) return
-    void loadDepartments(selectedCompanyId)
-    void loadUsers(selectedCompanyId)
-  }, [selectedCompanyId])
+  function setDraft(userId: string, patch: Partial<Draft>) {
+    setDrafts((prev) => ({ ...prev, [userId]: { ...(prev[userId] ?? { role: 'employee', departmentId: null }), ...patch } }))
+  }
 
-  async function onCreateCompany() {
-    const name = newCompanyName.trim()
-    if (name.length < 2) return setMsg('warning', 'Company name is too short.')
+  function isDirty(u: UserRow) {
+    const d = drafts[u.user_id]
+    if (!d) return false
+    const origRole = (u.membership_role ?? 'employee') as RoleType
+    const origDept = u.membership_department_id ?? null
+    const nextRole = d.role
+    const nextDept = (nextRole === 'admin' || nextRole === 'ceo') ? null : d.departmentId
+    return origRole !== nextRole || origDept !== nextDept
+  }
+
+  async function applyUpdate(u: UserRow) {
+    const d = drafts[u.user_id]
+    if (!d) return
+    const nextRole = d.role
+    const nextDept = (nextRole === 'admin' || nextRole === 'ceo') ? null : d.departmentId
+
+    if ((nextRole === 'employee' || nextRole === 'manager') && !nextDept) {
+      return setMsg({ variant: 'warning', text: 'Department is required for employee/manager.' })
+    }
 
     setLoading(true)
+    setMsg(null)
     try {
-      const { data, error } = await supabase.rpc('rpc_sys_create_company', {
-        p_name: name,
-        p_make_me_admin: true,
-        p_create_default_department: true,
-        p_default_department_name: 'General',
-        p_switch_my_profile_company: switchProfileToNewCompany,
+      const { error } = await supabase.rpc('rpc_sys_set_membership_role', {
+        p_company_id: selectedCompanyId,
+        p_user_id: u.user_id,
+        p_role: nextRole,
+        p_department_id: nextDept
       })
-
-      if (error) return setMsg('danger', `Create company failed: ${error.message}`)
-
-      const row = (data?.[0] ?? null) as any
-      setShowCreate(false)
-      setNewCompanyName('')
-      await loadCompanies()
-      if (row?.company_id) setSelectedCompanyId(row.company_id)
-      setMsg('success', `Created company: ${row?.company_name ?? name}`)
+      if (error) return setMsg({ variant: 'danger', text: `Failed to set role: ${error.message}` })
+      setMsg({ variant: 'success', text: 'Updated.' })
+      await loadUsers(selectedCompanyId)
     } finally {
       setLoading(false)
     }
   }
 
   async function setActive(userId: string, isActive: boolean) {
-    const { error } = await supabase.rpc('rpc_sys_set_profile_active', { p_user_id: userId, p_is_active: isActive })
-    if (error) return setMsg('danger', `Failed to set active: ${error.message}`)
-    setUsers((prev) => prev.map((u) => (u.user_id === userId ? { ...u, is_active: isActive } : u)))
-    setMsg('success', `User ${isActive ? 'activated' : 'deactivated'}.`)
+    setLoading(true)
+    setMsg(null)
+    try {
+      const { error } = await supabase.rpc('rpc_sys_set_profile_active', { p_user_id: userId, p_is_active: isActive })
+      if (error) return setMsg({ variant: 'danger', text: `Failed to set active: ${error.message}` })
+      await loadUsers(selectedCompanyId)
+    } finally {
+      setLoading(false)
+    }
   }
 
-  async function removeMembership(companyId: string, userId: string) {
-    const ok = window.confirm('Remove this user from the company? (This removes membership only.)')
-    if (!ok) return
+  async function onCreateDepartment() {
+    if (!selectedCompanyId) return
+    const name = newDeptName.trim()
+    if (name.length < 2) return setMsg({ variant: 'warning', text: 'Department name is too short.' })
 
-    const { data, error } = await supabase.rpc('rpc_sys_remove_membership', { p_company_id: companyId, p_user_id: userId })
-    if (error) return setMsg('danger', `Failed to remove membership: ${error.message}`)
-    const removed = Boolean((data?.[0] as any)?.removed)
-    setMsg(removed ? 'success' : 'warning', removed ? 'Membership removed.' : 'No membership removed.')
-    await loadUsers(companyId)
+    setLoading(true)
+    setMsg(null)
+    try {
+      const { error } = await supabase.rpc('rpc_sys_create_department', { p_company_id: selectedCompanyId, p_name: name })
+      if (error) return setMsg({ variant: 'danger', text: `Create department failed: ${error.message}` })
+      setNewDeptName('')
+      setMsg({ variant: 'success', text: 'Department created.' })
+      await loadDepartments(selectedCompanyId)
+    } finally {
+      setLoading(false)
+    }
   }
 
-  async function setRole(companyId: string, userId: string, role: RoleType, departmentId: string | null) {
-    const { error } = await supabase.rpc('rpc_sys_set_membership_role', {
-      p_company_id: companyId,
-      p_user_id: userId,
-      p_role: role,
-      p_department_id: departmentId,
-    })
-    if (error) return setMsg('danger', `Failed to set role: ${error.message}`)
-    setMsg('success', 'Role updated.')
-    await loadUsers(companyId)
+  async function ensurePlaceholder() {
+    if (!selectedCompanyId) return
+    setLoading(true)
+    setMsg(null)
+    try {
+      const { data, error } = await supabase.rpc('rpc_sys_ensure_placeholder_admin', {
+        p_company_id: selectedCompanyId,
+        p_placeholder_full_name: placeholderAdminName.trim() || 'Placeholder Admin'
+      })
+      if (error) return setMsg({ variant: 'danger', text: `Failed to ensure placeholder admin: ${error.message}` })
+      if (!data || data.length === 0) setMsg({ variant: 'warning', text: 'A real active admin/CEO already exists. Placeholder not created.' })
+      else setMsg({ variant: 'success', text: (data[0] as any).created ? 'Placeholder admin created.' : 'Placeholder admin already exists.' })
+      await loadUsers(selectedCompanyId)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function loadMoveDepartments(companyId: string) {
+    const { data, error } = await supabase.from('departments').select('id,name').eq('company_id', companyId).order('name')
+    if (error) return setMoveDepts([])
+    setMoveDepts((data ?? []) as Department[])
+  }
+
+  function openMove(u: UserRow) {
+    setMoveUser(u)
+    const firstOther = companies.find((c) => c.id !== selectedCompanyId)?.id ?? selectedCompanyId
+    setMoveCompanyId(firstOther)
+    setMoveRole(((u.membership_role ?? 'employee') as RoleType))
+    setMoveDeptId('')
+    setMoveKeepActive(true)
+    void loadMoveDepartments(firstOther)
+    setShowMove(true)
+  }
+
+  async function doMove() {
+    if (!moveUser || !moveCompanyId) return
+    const deptNeeded = !(moveRole === 'admin' || moveRole === 'ceo')
+    if (deptNeeded && !moveDeptId) return setMsg({ variant: 'warning', text: 'Pick a target department.' })
+
+    setLoading(true)
+    setMsg(null)
+    try {
+      const { error } = await supabase.rpc('rpc_sys_move_user_to_company', {
+        p_user_id: moveUser.user_id,
+        p_target_company_id: moveCompanyId,
+        p_target_role: moveRole,
+        p_target_department_id: deptNeeded ? moveDeptId : null,
+        p_keep_active: moveKeepActive
+      })
+      if (error) return setMsg({ variant: 'danger', text: `Move failed: ${error.message}` })
+      setShowMove(false)
+      setMoveUser(null)
+      setMsg({ variant: 'success', text: 'User moved.' })
+      await loadUsers(selectedCompanyId)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function onCreateCompany() {
+    const name = companyName.trim()
+    if (name.length < 2) return setMsg({ variant: 'warning', text: 'Company name is too short.' })
+
+    setLoading(true)
+    setMsg(null)
+    try {
+      const { data, error } = await supabase.rpc('rpc_sys_create_company', {
+        p_name: name,
+        p_make_me_admin: false,
+        p_create_default_department: true,
+        p_default_department_name: 'General',
+        p_switch_my_profile_company: false
+      })
+      if (error) return setMsg({ variant: 'danger', text: `Create company failed: ${error.message}` })
+
+      const row = (data?.[0] ?? null) as any
+      const newCompanyId = row?.company_id as string | undefined
+
+      setShowCreateCompany(false)
+      setCompanyName('')
+
+      await loadCompanies()
+      if (newCompanyId) {
+        setSelectedCompanyId(newCompanyId)
+        if (createPlaceholderAdmin) {
+          await supabase.rpc('rpc_sys_ensure_placeholder_admin', {
+            p_company_id: newCompanyId,
+            p_placeholder_full_name: placeholderAdminName.trim() || 'Placeholder Admin'
+          })
+        }
+        await refreshAll()
+      }
+
+      setMsg({ variant: 'success', text: `Company created: ${name}` })
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
     <div className="container-xxl py-3">
+      <div style={{ position: 'sticky', top: 0, zIndex: 9999, background: '#fffbeb', border: '1px solid #f59e0b', padding: 8, borderRadius: 12, marginBottom: 12 }}>
+        <b>SYSTEM ADMIN UI v4</b> — Create Company + Move + Update (no auto-save)
+      </div>
+
       <div className="d-flex align-items-center gap-2 mb-3">
-        <h2 className="h4 mb-0">
-          <i className="bi bi-shield-lock me-2" />
-          System Admin
-        </h2>
-
+        <h2 className="h5 mb-0">System Admin</h2>
         <div className="ms-auto d-flex gap-2">
-          <button className="btn btn-outline-primary btn-sm" onClick={() => setShowCreate(true)} disabled={loading}>
-            <i className="bi bi-plus-circle me-1" />
-            Create Company
-          </button>
-          <button className="btn btn-outline-secondary btn-sm" onClick={() => selectedCompanyId && loadUsers(selectedCompanyId)} disabled={loading || !selectedCompanyId}>
-            <i className="bi bi-arrow-repeat me-1" />
+          <Button variant="outline-primary" size="sm" className="rounded-pill" onClick={() => setShowCreateCompany(true)} disabled={loading}>
+            + Create Company
+          </Button>
+          <Button variant="outline-secondary" size="sm" className="rounded-pill" onClick={() => void refreshAll()} disabled={loading || !selectedCompanyId}>
             Refresh
-          </button>
+          </Button>
         </div>
       </div>
 
-      {toast && (
-        <div className={`alert alert-${toast.tone} py-2`} role="alert">
-          {toast.text}
-        </div>
-      )}
+      {msg && <Alert variant={msg.variant}>{msg.text}</Alert>}
 
-      <div className="card shadow-sm mb-3">
-        <div className="card-body d-flex flex-wrap align-items-center gap-3">
-          <div className="d-flex align-items-center gap-2">
-            <span className="fw-semibold">Company</span>
-            <select
-              className="form-select form-select-sm"
-              style={{ minWidth: 280 }}
-              value={selectedCompanyId}
-              onChange={(e) => setSelectedCompanyId(e.target.value)}
-              disabled={loading}
-            >
-              {companies.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="ms-auto d-flex align-items-center gap-2 text-muted">
-            {selectedCompany ? (
-              <>
-                <span>{users.length} users</span>
-                <span>•</span>
-                <span>{departments.length} departments</span>
-              </>
-            ) : (
-              <span>No company selected</span>
-            )}
-          </div>
-        </div>
-      </div>
-
-      <div className="card shadow-sm">
-        <div className="card-header bg-white d-flex align-items-center">
-          <div className="fw-semibold">Users</div>
-          {loading && (
-            <div className="ms-auto small text-muted">
-              <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true" />
-              Loading…
+      <Card className="ocp-card mb-3">
+        <Card.Body>
+          <Row className="g-2 align-items-end">
+            <div className="col-md-6">
+              <Form.Group>
+                <Form.Label className="fw-semibold">Company</Form.Label>
+                <Form.Select value={selectedCompanyId} onChange={(e) => setSelectedCompanyId(e.target.value)} disabled={loading}>
+                  {companies.map((c) => (<option key={c.id} value={c.id}>{c.name}</option>))}
+                </Form.Select>
+              </Form.Group>
             </div>
+
+            <div className="col-md-6">
+              <Form.Group>
+                <Form.Label className="fw-semibold">Create Department (scoped)</Form.Label>
+                <div className="d-flex gap-2">
+                  <Form.Control value={newDeptName} onChange={(e) => setNewDeptName(e.target.value)} placeholder="e.g. Procurement" />
+                  <Button variant="outline-success" className="rounded-pill" onClick={() => void onCreateDepartment()} disabled={loading || !selectedCompanyId}>
+                    Create
+                  </Button>
+                </div>
+              </Form.Group>
+            </div>
+          </Row>
+
+          <hr />
+
+          {!hasRealAdmin && (
+            <Alert variant="warning" className="mb-0">
+              <div className="fw-semibold">No real active admin/CEO is assigned for this company.</div>
+              <div className="small">
+                Placeholder admin: <span className="fw-semibold">{placeholderAdmin?.full_name ?? '(none yet)'}</span>{' '}
+                <span className="text-muted">{placeholderAdmin?.email ? `(${placeholderAdmin.email})` : ''}</span>
+              </div>
+              <div className="d-flex gap-2 flex-wrap mt-2">
+                <Form.Control style={{ maxWidth: 320 }} value={placeholderAdminName} onChange={(e) => setPlaceholderAdminName(e.target.value)} />
+                <Button variant="warning" className="rounded-pill" onClick={() => void ensurePlaceholder()} disabled={loading || !selectedCompanyId}>
+                  Ensure placeholder admin
+                </Button>
+              </div>
+            </Alert>
           )}
-        </div>
+        </Card.Body>
+      </Card>
 
-        <div className="table-responsive">
-          <table className="table table-hover align-middle mb-0">
-            <thead className="table-light">
-              <tr>
-                <th style={{ width: 280 }}>User</th>
-                <th>Email</th>
-                <th style={{ width: 120 }}>Active</th>
-                <th style={{ width: 160 }}>Role</th>
-                <th style={{ width: 240 }}>Department</th>
-                <th style={{ width: 140 }} />
-              </tr>
-            </thead>
-            <tbody>
-              {users.map((u) => {
-                const role = (u.membership_role ?? 'employee') as RoleType
-                const isAdminLike = role === 'admin' || role === 'ceo'
+      <Card className="ocp-card">
+        <Card.Body>
+          <div className="d-flex align-items-center justify-content-between mb-2">
+            <div className="fw-semibold">Users</div>
+            {loading && <div className="small text-muted"><Spinner size="sm" animation="border" className="me-2" />Working…</div>}
+          </div>
 
-                return (
-                  <tr key={u.user_id}>
-                    <td>
-                      <div className="fw-semibold">{u.full_name ?? '(no name)'}</div>
-                      <div className="small text-muted font-monospace">{u.user_id.slice(0, 8)}…</div>
-                    </td>
+          <div className="ocp-table">
+            <Table responsive className="mb-0 align-middle">
+              <thead>
+                <tr>
+                  <th style={{ width: 260 }}>User</th>
+                  <th>Email</th>
+                  <th style={{ width: 120 }}>Active</th>
+                  <th style={{ width: 160 }}>Role</th>
+                  <th style={{ width: 220 }}>Department</th>
+                  <th style={{ width: 140 }}>Update</th>
+                  <th style={{ width: 120 }}>Move</th>
+                </tr>
+              </thead>
+              <tbody>
+                {users.map((u) => {
+                  const d = drafts[u.user_id] ?? { role: (u.membership_role ?? 'employee') as RoleType, departmentId: u.membership_department_id ?? null }
+                  const isAdminLike = d.role === 'admin' || d.role === 'ceo'
+                  const dirty = isDirty(u)
 
-                    <td>{u.email ?? <span className="text-muted">(no email)</span>}</td>
-
-                    <td>
-                      {u.is_active ? <Badge tone="green">Active</Badge> : <Badge tone="red">Inactive</Badge>}
-                      <div className="form-check form-switch mt-2">
-                        <input
-                          className="form-check-input"
-                          type="checkbox"
+                  return (
+                    <tr key={u.user_id}>
+                      <td>
+                        <div className="fw-semibold">{u.full_name ?? '(no name)'}</div>
+                        <div className="small text-muted font-monospace">{u.user_id.slice(0, 8)}…</div>
+                        {isPlaceholderEmail(u.email) && <Badge bg="secondary" className="mt-1">placeholder</Badge>}
+                      </td>
+                      <td>{u.email ?? '—'}</td>
+                      <td>
+                        <Form.Check
+                          type="switch"
                           checked={u.is_active}
                           onChange={(e) => void setActive(u.user_id, e.target.checked)}
+                          disabled={loading}
+                          label={u.is_active ? 'Active' : 'Inactive'}
                         />
-                      </div>
-                    </td>
+                      </td>
+                      <td>
+                        <Form.Select
+                          size="sm"
+                          value={d.role}
+                          disabled={loading}
+                          onChange={(e) => {
+                            const nextRole = e.target.value as RoleType
+                            if (nextRole === 'admin' || nextRole === 'ceo') setDraft(u.user_id, { role: nextRole, departmentId: null })
+                            else setDraft(u.user_id, { role: nextRole, departmentId: d.departmentId ?? departments[0]?.id ?? null })
+                          }}
+                        >
+                          <option value="employee">employee</option>
+                          <option value="manager">manager</option>
+                          <option value="admin">admin</option>
+                          <option value="ceo">ceo</option>
+                        </Form.Select>
+                      </td>
+                      <td>
+                        <Form.Select
+                          size="sm"
+                          value={d.departmentId ?? ''}
+                          disabled={loading || isAdminLike}
+                          onChange={(e) => setDraft(u.user_id, { departmentId: e.target.value || null })}
+                        >
+                          <option value="">{isAdminLike ? '(none)' : '(select)'}</option>
+                          {departments.map((dept) => (<option key={dept.id} value={dept.id}>{dept.name}</option>))}
+                        </Form.Select>
+                      </td>
+                      <td>
+                        <Button variant={dirty ? 'primary' : 'outline-secondary'} size="sm" className="rounded-pill w-100" disabled={loading || !dirty} onClick={() => void applyUpdate(u)}>
+                          Update
+                        </Button>
+                      </td>
+                      <td>
+                        <Button variant="outline-primary" size="sm" className="rounded-pill w-100" disabled={loading} onClick={() => openMove(u)}>
+                          Move
+                        </Button>
+                      </td>
+                    </tr>
+                  )
+                })}
+                {!users.length && (
+                  <tr><td colSpan={7} className="text-center text-muted py-4">No users found for this company.</td></tr>
+                )}
+              </tbody>
+            </Table>
+          </div>
+        </Card.Body>
+      </Card>
 
-                    <td>
-                      <select
-                        className="form-select form-select-sm"
-                        value={role}
-                        onChange={(e) => {
-                          const nextRole = e.target.value as RoleType
-                          if (nextRole === 'admin' || nextRole === 'ceo') {
-                            void setRole(selectedCompanyId, u.user_id, nextRole, null)
-                          } else {
-                            const fallbackDept = u.membership_department_id ?? departments[0]?.id ?? null
-                            void setRole(selectedCompanyId, u.user_id, nextRole, fallbackDept)
-                          }
-                        }}
-                      >
-                        <option value="employee">employee</option>
-                        <option value="manager">manager</option>
-                        <option value="admin">admin</option>
-                        <option value="ceo">ceo</option>
-                      </select>
-                      <div className="small text-muted mt-1">
-                        {isAdminLike ? 'Company-scoped' : 'Department-scoped'}
-                      </div>
-                    </td>
-
-                    <td>
-                      <select
-                        className="form-select form-select-sm"
-                        value={u.membership_department_id ?? ''}
-                        disabled={isAdminLike}
-                        onChange={(e) => void setRole(selectedCompanyId, u.user_id, role, e.target.value || null)}
-                      >
-                        <option value="">{isAdminLike ? '(none)' : '(select)'}</option>
-                        {departments.map((d) => (
-                          <option key={d.id} value={d.id}>
-                            {d.name}
-                          </option>
-                        ))}
-                      </select>
-                    </td>
-
-                    <td className="text-end">
-                      <button className="btn btn-outline-danger btn-sm" onClick={() => void removeMembership(selectedCompanyId, u.user_id)} disabled={loading}>
-                        <i className="bi bi-person-x me-1" />
-                        Remove
-                      </button>
-                    </td>
-                  </tr>
-                )
-              })}
-
-              {users.length === 0 && !loading && (
-                <tr>
-                  <td colSpan={6} className="text-muted py-4 text-center">
-                    No users found for this company.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Modal */}
-      {showCreate && (
-        <div className="modal fade show d-block" tabIndex={-1} role="dialog" aria-modal="true">
-          <div className="modal-dialog modal-dialog-centered" role="document">
-            <div className="modal-content shadow">
-              <div className="modal-header">
-                <h5 className="modal-title">Create Company</h5>
-                <button type="button" className="btn-close" aria-label="Close" onClick={() => setShowCreate(false)} />
-              </div>
-
-              <div className="modal-body">
-                <label className="form-label fw-semibold">Company name</label>
-                <input
-                  className="form-control"
-                  value={newCompanyName}
-                  onChange={(e) => setNewCompanyName(e.target.value)}
-                  placeholder="e.g., New Customer Co"
-                />
-
-                <div className="form-check mt-3">
-                  <input
-                    className="form-check-input"
-                    type="checkbox"
-                    id="switchProfile"
-                    checked={switchProfileToNewCompany}
-                    onChange={(e) => setSwitchProfileToNewCompany(e.target.checked)}
-                  />
-                  <label className="form-check-label" htmlFor="switchProfile">
-                    Switch my profile company to the new company (single-company mode)
-                  </label>
-                </div>
-
-                <div className="small text-muted mt-3">
-                  This calls <code>rpc_sys_create_company</code> and makes you admin of the new company.
-                </div>
-              </div>
-
-              <div className="modal-footer">
-                <button className="btn btn-outline-secondary" onClick={() => setShowCreate(false)} disabled={loading}>
-                  Cancel
-                </button>
-                <button className="btn btn-primary" onClick={() => void onCreateCompany()} disabled={loading}>
-                  {loading ? 'Creating…' : 'Create'}
-                </button>
-              </div>
-            </div>
+      <Modal show={showMove} onHide={() => setShowMove(false)} centered backdrop="static">
+        <Modal.Header closeButton><Modal.Title>Move user</Modal.Title></Modal.Header>
+        <Modal.Body>
+          <div className="mb-2">
+            <div className="fw-semibold">{moveUser?.full_name ?? '(no name)'}</div>
+            <div className="small text-muted">{moveUser?.email ?? '—'}</div>
           </div>
 
-          {/* Backdrop */}
-          <div className="modal-backdrop fade show" onClick={() => setShowCreate(false)} />
-        </div>
-      )}
+          <Form.Group className="mb-3">
+            <Form.Label className="fw-semibold">Target company</Form.Label>
+            <Form.Select value={moveCompanyId} onChange={(e) => { const cid = e.target.value; setMoveCompanyId(cid); setMoveDeptId(''); void loadMoveDepartments(cid) }}>
+              {companies.map((c) => (<option key={c.id} value={c.id}>{c.name}</option>))}
+            </Form.Select>
+          </Form.Group>
+
+          <Row className="g-2">
+            <div className="col-md-6">
+              <Form.Group>
+                <Form.Label className="fw-semibold">Role</Form.Label>
+                <Form.Select value={moveRole} onChange={(e) => { const r = e.target.value as RoleType; setMoveRole(r); if (r === 'admin' || r === 'ceo') setMoveDeptId('') }}>
+                  <option value="employee">employee</option>
+                  <option value="manager">manager</option>
+                  <option value="admin">admin</option>
+                  <option value="ceo">ceo</option>
+                </Form.Select>
+              </Form.Group>
+            </div>
+            <div className="col-md-6">
+              <Form.Group>
+                <Form.Label className="fw-semibold">Department</Form.Label>
+                <Form.Select value={moveDeptId} disabled={moveRole === 'admin' || moveRole === 'ceo'} onChange={(e) => setMoveDeptId(e.target.value)}>
+                  <option value="">{moveRole === 'admin' || moveRole === 'ceo' ? '(none)' : '(select)'}</option>
+                  {moveDepts.map((d) => (<option key={d.id} value={d.id}>{d.name}</option>))}
+                </Form.Select>
+              </Form.Group>
+            </div>
+          </Row>
+
+          <Form.Check className="mt-3" type="switch" id="keepActive" label="Keep user active" checked={moveKeepActive} onChange={(e) => setMoveKeepActive(e.target.checked)} />
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="outline-secondary" className="rounded-pill" onClick={() => setShowMove(false)} disabled={loading}>Cancel</Button>
+          <Button variant="primary" className="rounded-pill" onClick={() => void doMove()} disabled={loading || !moveCompanyId}>
+            {loading ? <Spinner size="sm" animation="border" /> : 'Move'}
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      <Modal show={showCreateCompany} onHide={() => setShowCreateCompany(false)} centered backdrop="static">
+        <Modal.Header closeButton><Modal.Title>Create Company</Modal.Title></Modal.Header>
+        <Modal.Body>
+          <Form.Group className="mb-3">
+            <Form.Label className="fw-semibold">Company name</Form.Label>
+            <Form.Control value={companyName} onChange={(e) => setCompanyName(e.target.value)} placeholder="e.g. New Customer Co" />
+          </Form.Group>
+
+          <Form.Check
+            type="switch"
+            id="createPlaceholderAdmin"
+            label="Create placeholder admin (if no real admin exists)"
+            checked={createPlaceholderAdmin}
+            onChange={(e) => setCreatePlaceholderAdmin(e.target.checked)}
+            className="mb-3"
+          />
+
+          {createPlaceholderAdmin && (
+            <Form.Group>
+              <Form.Label className="fw-semibold">Placeholder admin name</Form.Label>
+              <Form.Control value={placeholderAdminName} onChange={(e) => setPlaceholderAdminName(e.target.value)} />
+            </Form.Group>
+          )}
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="outline-secondary" className="rounded-pill" onClick={() => setShowCreateCompany(false)} disabled={loading}>Cancel</Button>
+          <Button variant="primary" className="rounded-pill" onClick={() => void onCreateCompany()} disabled={loading}>
+            {loading ? <Spinner size="sm" animation="border" /> : 'Create'}
+          </Button>
+        </Modal.Footer>
+      </Modal>
     </div>
   )
 }
