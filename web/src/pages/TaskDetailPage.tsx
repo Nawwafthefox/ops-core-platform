@@ -44,6 +44,13 @@ export function TaskDetailPage() {
   const [comments, setComments] = useState<CommentRow[]>([])
   const [attachments, setAttachments] = useState<AttachmentRow[]>([])
 
+
+  const [commentUserMap, setCommentUserMap] = useState<Record<string, string>>({});
+  function commentDisplayName(userId: string) {
+    return commentUserMap[userId] ?? 'Unknown user';
+  }
+
+
   const [departments, setDepartments] = useState<DepartmentRow[]>([])
   const [deptPeople, setDeptPeople] = useState<ProfileRow[]>([])
 
@@ -144,7 +151,7 @@ export function TaskDetailPage() {
       setComments((co as CommentRow[]) ?? [])
       setAttachments((at as AttachmentRow[]) ?? [])
 
-      const { data: depts, error: dErr } = await supabase.from('departments').select('*').order('name')
+      const { data: depts, error: dErr } = await supabase.from('departments').select('*').eq('company_id', (req as any)?.company_id).order('name')
       if (dErr) throw dErr
       setDepartments((depts as DepartmentRow[]) ?? [])
     } catch (e) {
@@ -158,6 +165,37 @@ export function TaskDetailPage() {
     loadAll()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
+
+  /* load_commenter_names_rpc */
+  useEffect(() => {
+    const run = async () => {
+      if (!id) return;
+      if (!comments.length) return;
+
+      const { data, error } = await supabase.rpc('rpc_request_comment_authors', { p_request_id: id });
+      if (error) {
+        // eslint-disable-next-line no-console
+        console.warn('[rpc_request_comment_authors] error', error);
+        return;
+      }
+
+      const map: Record<string, string> = {};
+      for (const row of (data ?? [])) {
+        const r: any = row;
+        map[r.user_id] = r.display_name || 'Unknown user';
+      }
+      setCommentUserMap(map);
+    };
+
+    run();
+  }, [id, comments.length]);
+
+
+
+  
+
+
+  
 
   useEffect(() => {
     const loadDeptPeople = async () => {
@@ -264,11 +302,9 @@ export function TaskDetailPage() {
     setBusy(true)
     setErr(null)
     try {
-      const { error } = await supabase.rpc('rpc_return_step', {
+      const { error } = await supabase.rpc('rpc_return_step_prev_dept', {
         p_step_id: currentStep.id,
-        p_reason: returnReason.trim(),
-        p_return_to_department_id: returnDeptId || null,
-        p_return_to_assignee_id: returnAssigneeId || null,
+        p_reason: returnReason.trim(),        p_return_to_assignee_id: returnAssigneeId || null,
       })
       if (error) throw error
       setShowReturn(false)
@@ -435,12 +471,12 @@ export function TaskDetailPage() {
     const load = async () => {
       setReturnPeople([])
       setReturnAssigneeId('')
-      if (!canPickReturnAssignee || !returnDeptId) return
+      if (!canPickReturnAssignee || !currentStep?.from_department_id) return
 
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
-        .eq('department_id', returnDeptId)
+        .eq('department_id', currentStep.from_department_id)
         .eq('is_active', true)
         .order('full_name')
       if (error) return
@@ -713,9 +749,9 @@ export function TaskDetailPage() {
                   <div className="ocp-timeline">
                     {comments.map((c) => (
                       <div key={c.id} className="ocp-timeline-item">
-                        <div className="ocp-timeline-dot" />
-                        <div className="ocp-timeline-title">User {c.user_id.slice(0, 8)}</div>
-                        <div className="ocp-timeline-meta">{fmtDateTime(c.created_at)}</div>
+                        <div className="ocp-timeline-title">{commentDisplayName(c.user_id)}</div>
+<div className="ocp-timeline-dot" />
+                                                <div className="ocp-timeline-meta">{fmtDateTime(c.created_at)}</div>
                         <div style={{ whiteSpace: 'pre-wrap' }}>{c.body}</div>
                       </div>
                     ))}
@@ -734,7 +770,7 @@ export function TaskDetailPage() {
                   rows={3}
                   value={commentBody}
                   onChange={(e) => setCommentBody(e.target.value)}
-                  placeholder="{t('task_detail.comment_placeholder')}"
+                  placeholder={t('task_detail.comment_placeholder')}
                 />
               </Form.Group>
 
@@ -826,10 +862,7 @@ export function TaskDetailPage() {
                   <div key={s.id} className="ocp-timeline-item">
                     <div className="ocp-timeline-dot" />
                     <div className="d-flex justify-content-between align-items-start">
-                      <div className="ocp-timeline-title">
-                        {t('task_detail.step')} {s.step_no} • {t('task_detail.dept')} {s.department_id.slice(0, 8)}
-                      </div>
-                      <div>
+                                            <div>
                         <StepStatusBadge status={s.status} />
                       </div>
                     </div>
@@ -973,7 +1006,7 @@ export function TaskDetailPage() {
         </Modal.Footer>
       </Modal>
 
-      {/* Return modal */}
+      {/* Return modal (LOCKED to previous department) */}
       <Modal show={showReturn} onHide={() => setShowReturn(false)} centered>
         <Modal.Header closeButton>
           <Modal.Title>{t('task_detail.return_title')}</Modal.Title>
@@ -990,20 +1023,19 @@ export function TaskDetailPage() {
               rows={3}
               value={returnReason}
               onChange={(e) => setReturnReason(e.target.value)}
-              placeholder="{t('task_detail.return_reason_placeholder')}"
+              placeholder={t('task_detail.return_reason_placeholder')}
             />
           </Form.Group>
 
           <Form.Group className="mb-3">
             <Form.Label>{t('task_detail.return_to_department')}</Form.Label>
-            <Form.Select value={returnDeptId} onChange={(e) => setReturnDeptId(e.target.value)}>
-              <option value="">{t('task_detail.default_previous')}</option>
-              {departments.map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.name}
-                </option>
-              ))}
-            </Form.Select>
+            <Form.Control
+              value={
+                departments.find((d) => d.id === currentStep?.from_department_id)?.name ??
+                t('task_detail.default_previous')
+              }
+              disabled
+            />
           </Form.Group>
 
           <Form.Group>
@@ -1011,9 +1043,11 @@ export function TaskDetailPage() {
             <Form.Select
               value={returnAssigneeId}
               onChange={(e) => setReturnAssigneeId(e.target.value)}
-              disabled={!canPickReturnAssignee || !returnDeptId}
+              disabled={!canPickReturnAssignee || !currentStep?.from_department_id}
             >
-              <option value="">{canPickReturnAssignee ? t('task_detail.unassigned') : t('task_detail.only_admin_or_manager_assign')}</option>
+              <option value="">
+                {canPickReturnAssignee ? t('task_detail.unassigned') : t('task_detail.only_admin_or_manager_assign')}
+              </option>
               {returnPeople.map((p) => (
                 <option key={p.user_id} value={p.user_id}>
                   {p.full_name}
@@ -1024,7 +1058,7 @@ export function TaskDetailPage() {
         </Modal.Body>
         <Modal.Footer>
           <Button variant="outline-secondary" className="rounded-pill" onClick={() => setShowReturn(false)} disabled={busy}>
-            Cancel
+            {t('task_detail.cancel')}
           </Button>
           <Button
             variant="danger"
@@ -1032,12 +1066,12 @@ export function TaskDetailPage() {
             onClick={() => doReturn()}
             disabled={busy || returnReason.trim().length < 3}
           >
-            {busy ? <Spinner size="sm" animation="border" /> : 'Return'}
+            {busy ? <Spinner size="sm" animation="border" /> : t('task_detail.return_button')}
           </Button>
         </Modal.Footer>
       </Modal>
 
-      {/* Put on hold modal */}
+{/* Put on hold modal */}{/* Put on hold modal */}
       <Modal show={showHold} onHide={() => setShowHold(false)} centered>
         <Modal.Header closeButton>
           <Modal.Title>{t('task_detail.hold_title')}</Modal.Title>

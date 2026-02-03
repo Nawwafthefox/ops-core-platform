@@ -16,3 +16,8 @@ export const supabase = createClient(supabaseUrl ?? '', supabaseAnonKey ?? '', {
     autoRefreshToken: true,
   },
 })
+
+/** Dev helper: expose Supabase client in browser console */
+if (import.meta.env.DEV) {
+  (window as any).supabase = supabase;
+}

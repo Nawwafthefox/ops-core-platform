@@ -1,93 +1,94 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { Button, Card, Col, Row, Spinner, Table } from 'react-bootstrap'
+import { Button, Card, Spinner, Table, Badge } from 'react-bootstrap'
 import { useNavigate } from 'react-router-dom'
-import { useTranslation } from 'react-i18next';
+import { useTranslation } from 'react-i18next'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../lib/AuthProvider'
 import type { RequestCurrentRow } from '../lib/types'
 import { fmtHoursDays } from '../lib/format'
 import { RequestStatusBadge, StepStatusBadge } from '../components/StatusBadge'
 
-type Kpi = {
-  myOpen: number
-  pendingApproval: number
-  overdue: number
-  avgAgeHours: number | null
+type KpiRow = {
+  scope: 'personal' | 'department' | 'company'
+  company_id: string
+  department_id: string | null
+  active_tasks: number
+  overdue_tasks: number
+  pending_approval: number
+  unassigned_tasks: number
+  on_hold: number
+  info_required: number
+  avg_open_age_hours: number | null
+  avg_cycle_time_hours_30d: number | null
+  completed_steps_week: number
+  approved_steps_week: number
 }
 
 export function DashboardPage() {
   const { ctx } = useAuth()
   const nav = useNavigate()
-
-  const { t } = useTranslation();
+  const { t } = useTranslation()
 
   const [loading, setLoading] = useState(true)
   const [rows, setRows] = useState<RequestCurrentRow[]>([])
-  const [kpi, setKpi] = useState<Kpi>({ myOpen: 0, pendingApproval: 0, overdue: 0, avgAgeHours: null })
-
-  const isManager = ctx?.role === 'manager'
-  const isAdminish = ctx?.role === 'admin' || ctx?.role === 'ceo'
+  const [kpi, setKpi] = useState<KpiRow | null>(null)
 
   const fetchData = async () => {
     setLoading(true)
     try {
-      const { data, error } = await supabase
-        .from('v_requests_current')
-        .select('*')
-        .eq('request_status', 'open')
-        .order('updated_at', { ascending: false })
-        .limit(200)
+      const [{ data: list, error: listErr }, { data: kpiData, error: kpiErr }] = await Promise.all([
+        supabase
+          .from('v_requests_current')
+          .select('*')
+          .eq('request_status', 'open')
+          .order('updated_at', { ascending: false })
+          .limit(200),
+        supabase.rpc('rpc_dashboard_kpis')
+      ])
 
-      if (error) throw error
-      const list = (data as RequestCurrentRow[]) ?? []
-      setRows(list)
+      if (listErr) throw listErr
+      if (kpiErr) throw kpiErr
 
-      const now = new Date()
-      const nowIso = now.toISOString()
-
-      const myOpen = list.filter((r) => r.current_assignee_id === ctx?.user_id).length
-
-      const pendingApproval = list.filter((r) => {
-        if (!r.current_step_status) return false
-        if (r.current_step_status !== 'done_pending_approval') return false
-        if (isAdminish) return true
-        if (isManager && ctx?.department_id) return r.current_department_id === ctx.department_id
-        return false
-      }).length
-
-      const overdue = list.filter((r) => r.due_at && r.due_at < nowIso && r.request_status === 'open').length
-
-      const ageVals = list
-        .map((r) => r.request_age_hours)
-        .filter((n): n is number => typeof n === 'number' && !Number.isNaN(n))
-      const avgAgeHours = ageVals.length ? ageVals.reduce((a, b) => a + b, 0) / ageVals.length : null
-
-      setKpi({ myOpen, pendingApproval, overdue, avgAgeHours })
+      setRows((list as RequestCurrentRow[]) ?? [])
+      setKpi(((kpiData as any[])?.[0] ?? null) as KpiRow | null)
     } finally {
       setLoading(false)
     }
   }
 
   useEffect(() => {
-    fetchData()
+    void fetchData()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ctx?.user_id])
 
   const top = useMemo(() => rows.slice(0, 8), [rows])
+
+  const scopeLabel =
+    kpi?.scope === 'department' ? 'Department' : kpi?.scope === 'company' ? 'Company' : 'My'
+
+  const doneThisWeek =
+    kpi?.scope === 'personal'
+      ? (kpi?.completed_steps_week ?? 0)
+      : (kpi?.approved_steps_week ?? 0)
+
+  const avgTime =
+    kpi?.avg_cycle_time_hours_30d == null
+      ? '—'
+      : `${Number(kpi.avg_cycle_time_hours_30d).toFixed(1)} h`
 
   return (
     <div>
       <div className="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
         <div>
           <div className="fw-semibold" style={{ fontSize: 18 }}>
-            {t('dashboard.welcome', { name: ctx?.full_name ?? '' })}
+            Welcome, {ctx?.full_name}
           </div>
           <div className="ocp-muted">
-            {t('dashboard.subtitle')}
+            {scopeLabel} KPIs • approvals • SLA • workload
           </div>
         </div>
         <div className="d-flex gap-2">
-          <Button variant="outline-secondary" className="rounded-pill" onClick={() => fetchData()} disabled={loading}>
+          <Button variant="outline-secondary" className="rounded-pill" onClick={() => void fetchData()} disabled={loading}>
             <i className="bi bi-arrow-clockwise me-2" />
             Refresh
           </Button>
@@ -98,48 +99,71 @@ export function DashboardPage() {
         </div>
       </div>
 
-      <div className="ocp-kpi mb-4">
+      {/* KPI cards */}
+      <div className="ocp-kpi mb-3">
         <Card className="ocp-card kpi-card">
           <Card.Body>
-            <div className="ocp-muted small">{t('dashboard.my_open_tasks')}</div>
-            <div className="display-6 fw-semibold">{kpi.myOpen}</div>
-            <div className="small ocp-muted">{t('dashboard.assigned_to_you')}</div>
+            <div className="ocp-muted small">{scopeLabel} active tasks</div>
+            <div className="display-6 fw-semibold">{kpi?.active_tasks ?? 0}</div>
+            <div className="small ocp-muted">Current step workload</div>
           </Card.Body>
         </Card>
 
         <Card className="ocp-card kpi-card">
           <Card.Body>
-            <div className="ocp-muted small">{t('dashboard.pending_approvals')}</div>
-            <div className="display-6 fw-semibold">{kpi.pendingApproval}</div>
-            <div className="small ocp-muted">{isManager ? t('dashboard.in_your_department') : t('dashboard.company_wide')}</div>
+            <div className="ocp-muted small">{scopeLabel} overdue</div>
+            <div className="display-6 fw-semibold">{kpi?.overdue_tasks ?? 0}</div>
+            <div className="small ocp-muted">Past due date</div>
           </Card.Body>
         </Card>
 
         <Card className="ocp-card kpi-card">
           <Card.Body>
-            <div className="ocp-muted small">{t('dashboard.overdue')}</div>
-            <div className="display-6 fw-semibold">{kpi.overdue}</div>
-            <div className="small ocp-muted">{t('dashboard.past_due_date')}</div>
-          </Card.Body>
-        </Card>
-
-        <Card className="ocp-card kpi-card">
-          <Card.Body>
-            <div className="ocp-muted small">{t('dashboard.avg_age')}</div>
-            <div className="display-6 fw-semibold">
-              {kpi.avgAgeHours == null ? '—' : `${kpi.avgAgeHours.toFixed(1)} h`}
+            <div className="ocp-muted small">{scopeLabel} done this week</div>
+            <div className="display-6 fw-semibold">{doneThisWeek}</div>
+            <div className="small ocp-muted">
+              {kpi?.scope === 'personal' ? 'Completed by you' : 'Approved/forwarded'}
             </div>
-            <div className="small ocp-muted">{t('dashboard.open_requests')}</div>
+          </Card.Body>
+        </Card>
+
+        <Card className="ocp-card kpi-card">
+          <Card.Body>
+            <div className="ocp-muted small">{scopeLabel} avg task time</div>
+            <div className="display-6 fw-semibold">{avgTime}</div>
+            <div className="small ocp-muted">Completed steps (last 30d)</div>
           </Card.Body>
         </Card>
       </div>
 
+      {/* Extra management KPIs (actionable) */}
+      {kpi && (
+        <div className="d-flex flex-wrap gap-2 mb-4">
+          <Badge bg="light" text="dark" className="border rounded-pill px-3 py-2">
+            Pending approvals: <b>{kpi.pending_approval}</b>
+          </Badge>
+          <Badge bg="light" text="dark" className="border rounded-pill px-3 py-2">
+            Unassigned: <b>{kpi.unassigned_tasks}</b>
+          </Badge>
+          <Badge bg="light" text="dark" className="border rounded-pill px-3 py-2">
+            On hold: <b>{kpi.on_hold}</b>
+          </Badge>
+          <Badge bg="light" text="dark" className="border rounded-pill px-3 py-2">
+            Info required: <b>{kpi.info_required}</b>
+          </Badge>
+          <Badge bg="light" text="dark" className="border rounded-pill px-3 py-2">
+            Avg open age: <b>{kpi.avg_open_age_hours == null ? '—' : `${kpi.avg_open_age_hours.toFixed(1)} h`}</b>
+          </Badge>
+        </div>
+      )}
+
+      {/* List */}
       <Card className="ocp-card">
         <Card.Body>
           <div className="d-flex justify-content-between align-items-center mb-3">
             <div>
-              <div className="fw-semibold">{t('dashboard.latest_active_requests')}</div>
-              <div className="small ocp-muted">{t('dashboard.most_recently_updated')}</div>
+              <div className="fw-semibold">Latest active requests</div>
+              <div className="small ocp-muted">Most recently updated (visibility rules apply)</div>
             </div>
             <Button variant="outline-primary" className="rounded-pill" onClick={() => nav('/tasks')}>
               View all
@@ -155,25 +179,21 @@ export function DashboardPage() {
               <Table responsive className="mb-0 align-middle">
                 <thead>
                   <tr>
-                    <th>{t('dashboard.ref')}</th>
-                    <th>{t('dashboard.title')}</th>
-                    <th>{t('dashboard.current_dept')}</th>
-                    <th>{t('dashboard.assignee')}</th>
-                    <th>{t('dashboard.status')}</th>
-                    <th>{t('dashboard.age')}</th>
+                    <th>Ref</th>
+                    <th>Title</th>
+                    <th>Current dept</th>
+                    <th>Assignee</th>
+                    <th>Status</th>
+                    <th>Age</th>
                   </tr>
                 </thead>
                 <tbody>
                   {top.map((r) => (
-                    <tr
-                      key={r.id}
-                      style={{ cursor: 'pointer' }}
-                      onClick={() => nav(`/tasks/${r.id}`)}
-                    >
+                    <tr key={r.id} style={{ cursor: 'pointer' }} onClick={() => nav(`/tasks/${r.id}`)}>
                       <td className="fw-semibold">{r.reference_code}</td>
                       <td>{r.title}</td>
-                      <td>{r.current_department_name ?? t('dashboard.no_dept')}</td>
-                      <td>{r.current_assignee_name ?? t('dashboard.unassigned')}</td>
+                      <td>{r.current_department_name ?? '—'}</td>
+                      <td>{r.current_assignee_name ?? 'Unassigned'}</td>
                       <td className="d-flex gap-2 align-items-center">
                         <RequestStatusBadge status={r.request_status} />
                         <StepStatusBadge status={r.current_step_status} />
@@ -184,7 +204,7 @@ export function DashboardPage() {
                   {!top.length && (
                     <tr>
                       <td colSpan={6} className="text-center text-muted py-4">
-                        {t('dashboard.no_open_requests')}
+                        No open requests visible to you yet.
                       </td>
                     </tr>
                   )}
