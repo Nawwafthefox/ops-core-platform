@@ -166,6 +166,32 @@ export function TaskDetailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
 
+  /* COMMENTER_NAMES_V3 */
+  useEffect(() => {
+    const run = async () => {
+      if (!id) return;
+      if (!comments.length) {
+        setCommentUserMap({});
+        return;
+      }
+      const { data, error } = await supabase.rpc('rpc_request_comment_authors', { p_request_id: id });
+      if (error) {
+        // eslint-disable-next-line no-console
+        console.warn('[rpc_request_comment_authors] error', error);
+        return;
+      }
+      const map: Record<string, string> = {};
+      for (const row of (data ?? [])) {
+        const r: any = row;
+        map[r.user_id] = r.display_name || 'Unknown user';
+      }
+      setCommentUserMap(map);
+    };
+    run();
+  }, [id, comments.length]);
+
+
+
   /* load_commenter_names_rpc */
   useEffect(() => {
     const run = async () => {
@@ -749,7 +775,7 @@ export function TaskDetailPage() {
                   <div className="ocp-timeline">
                     {comments.map((c) => (
                       <div key={c.id} className="ocp-timeline-item">
-                        <div className="ocp-timeline-title">{commentDisplayName(c.user_id)}</div>
+                        <div className="ocp-timeline-title">{commentUserMap[c.user_id] ?? 'Unknown user'}</div>
 <div className="ocp-timeline-dot" />
                                                 <div className="ocp-timeline-meta">{fmtDateTime(c.created_at)}</div>
                         <div style={{ whiteSpace: 'pre-wrap' }}>{c.body}</div>

@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { Container, Offcanvas, Button } from 'react-bootstrap'
 import { Outlet, NavLink } from 'react-router-dom'
+import { useEnforceActiveUser } from '../lib/useEnforceActiveUser'
 import { useTranslation } from 'react-i18next';
 import { Sidebar } from './Sidebar'
 import { Topbar } from './Topbar'
@@ -24,6 +25,7 @@ const items: Item[] = [
 ]
 
 export function AppLayout() {
+  useEnforceActiveUser();
   const [show, setShow] = useState(false)
   const { ctx } = useAuth()
 
